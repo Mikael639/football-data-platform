@@ -54,13 +54,15 @@ CREATE TABLE fact_match (
 
 -- Table de faits des statistiques joueurs par match (niveau joueur-match)
 CREATE TABLE fact_player_match_stats (
-    match_id INT REFERENCES fact_match(match_id),   -- Match concerné
-    player_id INT REFERENCES dim_player(player_id), -- Joueur concerné
-    minutes INT,                    -- Minutes jouées
-    goals INT,                      -- Buts marqués
-    assists INT,                    -- Passes décisives
-    shots INT,                      -- Tirs
-    passes INT,                     -- Passes tentées/réalisées (selon définition)
-    pass_accuracy FLOAT,            -- Précision des passes (% ou ratio)
-    PRIMARY KEY (match_id, player_id) -- Une seule ligne par joueur et par match
+    match_id INT NOT NULL REFERENCES fact_match(match_id),
+    player_id INT NOT NULL REFERENCES dim_player(player_id),
+
+    minutes INT NOT NULL CHECK (minutes >= 0 AND minutes <= 130),
+    goals INT NOT NULL DEFAULT 0 CHECK (goals >= 0),
+    assists INT NOT NULL DEFAULT 0 CHECK (assists >= 0),
+    shots INT NOT NULL DEFAULT 0 CHECK (shots >= 0),
+    passes INT NOT NULL DEFAULT 0 CHECK (passes >= 0),
+    pass_accuracy FLOAT CHECK (pass_accuracy >= 0 AND pass_accuracy <= 1),
+
+    PRIMARY KEY (match_id, player_id)
 );
