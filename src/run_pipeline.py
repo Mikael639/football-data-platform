@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from src.utils.db import get_engine
 from src.utils.logger import get_logger
+from src.extract import extract_from_mock, count_extracted
 
 logger = get_logger("run_pipeline")
 
@@ -19,6 +20,9 @@ def main():
             # test simple
             conn.execute(text("SELECT 1;"))
 
+            #
+            payload = extract_from_mock()
+            extracted = count_extracted(payload)
             # log start
             conn.execute(
                 text("""
@@ -29,7 +33,7 @@ def main():
                     "run_id": str(run_id),
                     "started_at": started_at,
                     "status": "STARTED",
-                    "extracted_count": 0,
+                    "extracted_count": extracted,
                     "loaded_count": 0,
                 }
             )

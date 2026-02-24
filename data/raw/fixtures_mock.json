@@ -1,0 +1,62 @@
+{
+  "team": "Real Madrid",
+  "season": 2024,
+  "competition": "LaLiga",
+  "fixtures": [
+    {
+      "match_id": 1001,
+      "date": "2024-09-01",
+      "competition_id": 1,
+      "competition_name": "LaLiga",
+      "home_team": {"team_id": 541, "team_name": "Real Madrid", "country": "Spain"},
+      "away_team": {"team_id": 529, "team_name": "Barcelona", "country": "Spain"},
+      "score": {"home": 2, "away": 1},
+      "player_stats": [
+        {
+          "player": {
+            "player_id": 10,
+            "full_name": "Jude Bellingham",
+            "position": "MID",
+            "nationality": "England",
+            "birth_date": "2003-06-29",
+            "team_id": 541
+          },
+          "stats": {"minutes": 90, "goals": 1, "assists": 0, "shots": 3, "passes": 42, "pass_accuracy": 0.88}
+        },
+        {
+          "player": {
+            "player_id": 7,
+            "full_name": "Vinicius Junior",
+            "position": "FWD",
+            "nationality": "Brazil",
+            "birth_date": "2000-07-12",
+            "team_id": 541
+          },
+          "stats": {"minutes": 90, "goals": 1, "assists": 1, "shots": 4, "passes": 28, "pass_accuracy": 0.82}
+        }
+      ]
+    },
+    {
+      "match_id": 1002,
+      "date": "2024-09-15",
+      "competition_id": 1,
+      "competition_name": "LaLiga",
+      "home_team": {"team_id": 530, "team_name": "Atletico Madrid", "country": "Spain"},
+      "away_team": {"team_id": 541, "team_name": "Real Madrid", "country": "Spain"},
+      "score": {"home": 0, "away": 0},
+      "player_stats": [
+        {
+          "player": {
+            "player_id": 1,
+            "full_name": "Thibaut Courtois",
+            "position": "GK",
+            "nationality": "Belgium",
+            "birth_date": "1992-05-11",
+            "team_id": 541
+          },
+          "stats": {"minutes": 90, "goals": 0, "assists": 0, "shots": 0, "passes": 22, "pass_accuracy": 0.91}
+        }
+      ]
+    }
+  ]
+}

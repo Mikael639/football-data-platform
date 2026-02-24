@@ -144,6 +144,11 @@ ENV/
 env.bak/
 venv.bak/
 
+#Ajuste .gitignore (pour garder le mock)
+data/raw/*
+!data/raw/fixtures_mock.json
+data/processed/*
+
 # Spyder project settings
 .spyderproject
 .spyproject
