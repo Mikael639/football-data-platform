@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.env
+data/raw/*
+!data/raw/fixtures_mock.json
+data/processed/*
