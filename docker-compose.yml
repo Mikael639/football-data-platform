@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    container_name: football_postgres
+    environment:
+      POSTGRES_USER: football
+      POSTGRES_PASSWORD: football
+      POSTGRES_DB: football_dw
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
