@@ -8,6 +8,7 @@ from src.utils.logger import get_logger
 from src.extract import extract_from_mock, count_extracted
 from src.transform import transform, count_loaded
 from src.load import load_all
+from src.quality import run_quality_checks  # <-- ajout qualité
 
 logger = get_logger("run_pipeline")
 
@@ -20,7 +21,7 @@ def main():
     try:
         logger.info("Connecting to database...")
 
-        # 1) Test DB + insert STARTED
+        # 1️⃣ Insert STARTED log
         with engine.begin() as conn:
             conn.execute(text("SELECT 1;"))
             conn.execute(
@@ -41,21 +42,25 @@ def main():
                 },
             )
 
-        # 2) Extract
+        # 2️⃣ Extract
         payload = extract_from_mock()
         extracted = count_extracted(payload)
         logger.info(f"Extracted matches: {extracted}")
 
-        # 3) Transform
+        # 3️⃣ Transform
         transformed = transform(payload)
         planned_to_load = count_loaded(transformed)
         logger.info(f"Rows planned to load: {planned_to_load}")
 
-        # 4) Load
+        # 4️⃣ Load
         loaded = load_all(engine, transformed)
         logger.info(f"Loaded rows: {loaded}")
 
-        # 5) Update run log -> SUCCESS
+        # 5️⃣ Data Quality Checks
+        run_quality_checks(engine, str(run_id))
+        logger.info("Data quality checks: PASS")
+
+        # 6️⃣ Update SUCCESS
         ended_at = datetime.utcnow()
         with engine.begin() as conn:
             conn.execute(
@@ -83,9 +88,8 @@ def main():
         logger.exception("Pipeline failed")
         ended_at = datetime.utcnow()
 
-        # Log failure (update if STARTED exists, else insert)
         with engine.begin() as conn:
-            updated = conn.execute(
+            conn.execute(
                 text("""
                     UPDATE pipeline_run_log
                     SET ended_at = :ended_at,
@@ -99,26 +103,7 @@ def main():
                     "error_message": str(e),
                     "run_id": str(run_id),
                 },
-            ).rowcount
-
-            if updated == 0:
-                conn.execute(
-                    text("""
-                        INSERT INTO pipeline_run_log (
-                            run_id, started_at, ended_at, status, error_message
-                        )
-                        VALUES (
-                            :run_id, :started_at, :ended_at, :status, :error_message
-                        )
-                    """),
-                    {
-                        "run_id": str(run_id),
-                        "started_at": started_at,
-                        "ended_at": ended_at,
-                        "status": "FAILED",
-                        "error_message": str(e),
-                    },
-                )
+            )
 
         raise
 

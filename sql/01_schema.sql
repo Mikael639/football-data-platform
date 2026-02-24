@@ -66,3 +66,14 @@ CREATE TABLE fact_player_match_stats (
 
     PRIMARY KEY (match_id, player_id)
 );
+
+CREATE TABLE IF NOT EXISTS data_quality_check (
+    check_id UUID PRIMARY KEY,
+    run_id UUID NOT NULL REFERENCES pipeline_run_log(run_id),
+    check_name VARCHAR(200) NOT NULL,
+    status VARCHAR(20) NOT NULL, -- PASS/FAIL
+    metric_value FLOAT,
+    threshold FLOAT,
+    details TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
