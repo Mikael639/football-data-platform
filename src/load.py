@@ -34,14 +34,18 @@ def load_all(engine: Engine, data: Dict[str, Any]) -> int:
             country = EXCLUDED.country
     """, data["dim_competition"])
 
+    for r in data["dim_player"]:
+        r.setdefault("photo_url", None)
+
     loaded += _executemany(engine, """
-        INSERT INTO dim_player (player_id, full_name, position, nationality, birth_date, team_id)
-        VALUES (:player_id, :full_name, :position, :nationality, :birth_date, :team_id)
+        INSERT INTO dim_player (player_id, full_name, position, nationality, birth_date, photo_url, team_id)
+        VALUES (:player_id, :full_name, :position, :nationality, :birth_date, :photo_url, :team_id)
         ON CONFLICT (player_id) DO UPDATE
         SET full_name = EXCLUDED.full_name,
             position = EXCLUDED.position,
             nationality = EXCLUDED.nationality,
             birth_date = EXCLUDED.birth_date,
+            photo_url = EXCLUDED.photo_url,
             team_id = EXCLUDED.team_id
     """, data["dim_player"])
 

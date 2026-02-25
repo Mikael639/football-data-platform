@@ -29,8 +29,40 @@ services:
       DB_NAME: football_dw
       DB_USER: football
       DB_PASSWORD: football
+      FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN}
+      FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL}
+      FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON}
+      FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION}
+      FOOTBALL_DATA_TEAM_NAME: ${FOOTBALL_DATA_TEAM_NAME}
+      PIPELINE_MODE: ${PIPELINE_MODE}
+      
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: football_dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: football_dw
+      DB_USER: football
+      DB_PASSWORD: football
+      FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN}
+      FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL}
+      FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON}
+      FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION}
+      FOOTBALL_DATA_TEAM_NAME: ${FOOTBALL_DATA_TEAM_NAME}
+      PIPELINE_MODE: ${PIPELINE_MODE}
+    ports:
+      - "8501:8501"
     # relance si crash
     restart: "no"
+
+    
 
 volumes:
   pgdata:

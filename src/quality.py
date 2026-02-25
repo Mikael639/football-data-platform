@@ -33,7 +33,7 @@ def _log_check(
             },
         )
 
-def run_quality_checks(engine: Engine, run_id: str) -> None:
+def run_quality_checks(engine: Engine, run_id: str, allow_empty_player_stats: bool = False) -> None:
     """
     Checks simples mais très crédibles en contexte bancaire :
     - pas de doublons match_id
@@ -106,7 +106,17 @@ def run_quality_checks(engine: Engine, run_id: str) -> None:
         stat_cnt = conn.execute(text("SELECT COUNT(*) FROM fact_player_match_stats")).scalar_one()
 
     _log_check(engine, run_id, "volume_fact_match_nonzero", "PASS" if match_cnt > 0 else "FAIL", float(match_cnt), 1.0)
-    _log_check(engine, run_id, "volume_fact_player_stats_nonzero", "PASS" if stat_cnt > 0 else "FAIL", float(stat_cnt), 1.0)
+    player_stats_ok = stat_cnt > 0 or allow_empty_player_stats
+    stats_threshold = 0.0 if allow_empty_player_stats else 1.0
+    _log_check(
+        engine,
+        run_id,
+        "volume_fact_player_stats_nonzero",
+        "PASS" if player_stats_ok else "FAIL",
+        float(stat_cnt),
+        stats_threshold,
+        "empty allowed for football_data source" if allow_empty_player_stats and stat_cnt == 0 else None,
+    )
 
-    if match_cnt == 0 or stat_cnt == 0:
+    if match_cnt == 0 or (stat_cnt == 0 and not allow_empty_player_stats):
         raise ValueError("DQ FAIL: volumes are zero")

@@ -19,6 +19,7 @@
             "position": "MID",
             "nationality": "England",
             "birth_date": "2003-06-29",
+            "photo_url": "https://img.a.transfermarkt.technology/portrait/header/581678-1693987944.jpg",
             "team_id": 541
           },
           "stats": {"minutes": 90, "goals": 1, "assists": 0, "shots": 3, "passes": 42, "pass_accuracy": 0.88}
@@ -30,6 +31,7 @@
             "position": "FWD",
             "nationality": "Brazil",
             "birth_date": "2000-07-12",
+            "photo_url": "https://img.a.transfermarkt.technology/portrait/header/371998-1664869583.jpg",
             "team_id": 541
           },
           "stats": {"minutes": 90, "goals": 1, "assists": 1, "shots": 4, "passes": 28, "pass_accuracy": 0.82}
@@ -52,6 +54,7 @@
             "position": "GK",
             "nationality": "Belgium",
             "birth_date": "1992-05-11",
+            "photo_url": "https://img.a.transfermarkt.technology/portrait/header/108390-1682588883.jpg",
             "team_id": 541
           },
           "stats": {"minutes": 90, "goals": 0, "assists": 0, "shots": 0, "passes": 22, "pass_accuracy": 0.91}

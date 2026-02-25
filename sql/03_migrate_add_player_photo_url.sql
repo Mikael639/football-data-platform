@@ -1,0 +1,2 @@
+ALTER TABLE dim_player
+ADD COLUMN IF NOT EXISTS photo_url VARCHAR(500);
