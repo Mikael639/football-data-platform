@@ -12,11 +12,6 @@ st.set_page_config(page_title="Joueurs - Plateforme Data Football", layout="wide
 PAGE_DIR = Path(__file__).resolve().parent
 DASHBOARD_DIR = PAGE_DIR.parent
 DEFAULT_PLAYER_PLACEHOLDER = DASHBOARD_DIR / "assets" / "player-placeholder.svg"
-WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
-PHOTO_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-}
 
 
 def get_engine():
@@ -36,68 +31,6 @@ def current_season_start_year() -> int:
 
 def current_season_label(start_year: int) -> str:
     return f"{start_year}-{start_year + 1}"
-
-
-def has_photo_url(value) -> bool:
-    return isinstance(value, str) and bool(value.strip())
-
-
-@st.cache_data(show_spinner=False, ttl=24 * 60 * 60)
-def fetch_image_bytes(url: str):
-    try:
-        response = requests.get(url, headers=PHOTO_HEADERS, timeout=12)
-    except requests.RequestException:
-        return None
-    content_type = (response.headers.get("content-type") or "").lower()
-    if response.status_code != 200 or not content_type.startswith("image/"):
-        return None
-    return response.content or None
-
-
-@st.cache_data(show_spinner=False, ttl=24 * 60 * 60)
-def wikipedia_thumbnail_url(player_name: str):
-    if not player_name or not player_name.strip():
-        return None
-    params = {
-        "action": "query",
-        "generator": "search",
-        "gsrsearch": f"{player_name} footballer",
-        "gsrlimit": 1,
-        "prop": "pageimages",
-        "pithumbsize": 480,
-        "format": "json",
-    }
-    try:
-        response = requests.get(
-            WIKIPEDIA_API_URL,
-            params=params,
-            headers={"User-Agent": PHOTO_HEADERS["User-Agent"]},
-            timeout=12,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
-        return None
-
-    pages = (payload.get("query") or {}).get("pages") or {}
-    for page in pages.values():
-        src = ((page or {}).get("thumbnail") or {}).get("source")
-        if isinstance(src, str) and src.startswith("http"):
-            return src
-    return None
-
-
-def player_image_source(player_name, photo_url):
-    if has_photo_url(photo_url):
-        img = fetch_image_bytes(photo_url.strip())
-        if img:
-            return img, "remote"
-    wiki_url = wikipedia_thumbnail_url(str(player_name))
-    if wiki_url:
-        img = fetch_image_bytes(wiki_url)
-        if img:
-            return img, "wiki"
-    return str(DEFAULT_PLAYER_PLACEHOLDER), "failed" if has_photo_url(photo_url) else "missing"
 
 
 @st.cache_data(show_spinner=False, ttl=30 * 60)
@@ -159,7 +92,6 @@ def fetch_live_team_squad(team_id: int):
                 "birth_date": player.get("dateOfBirth"),
                 "team_id": int(team.get("id", team_id)),
                 "team_name": team.get("name"),
-                "photo_url": None,
             }
         )
     return pd.DataFrame(rows), None
@@ -199,18 +131,16 @@ players_query = text(
     """
 SELECT
   p.player_id, p.full_name, p.position, p.nationality, p.birth_date,
-  p.team_id, t.team_name, p.photo_url
+  p.team_id, t.team_name
 FROM dim_player p
 LEFT JOIN dim_team t ON t.team_id = p.team_id
 """
 )
 df_players_all = pd.read_sql(players_query, engine)
 if not df_players_all.empty:
-    df_players_all["photo_rank"] = df_players_all["photo_url"].apply(lambda v: 1 if has_photo_url(v) else 0)
     df_players_all = (
-        df_players_all.sort_values(["team_name", "full_name", "photo_rank"], ascending=[True, True, False])
+        df_players_all.sort_values(["team_name", "full_name"], ascending=[True, True])
         .drop_duplicates(subset=["player_id"], keep="first")
-        .drop(columns=["photo_rank"])
         .reset_index(drop=True)
     )
 
@@ -253,12 +183,8 @@ player = player_options[player_options["player_label"] == choice].iloc[0]
 
 c1, c2 = st.columns([1, 2])
 with c1:
-    img_source, img_status = player_image_source(player["full_name"], player["photo_url"])
-    st.image(img_source, use_column_width=True)
-    if img_status == "wiki":
-        st.info("Photo chargee via le fallback Wikipedia.")
-    elif img_status != "remote":
-        st.info("Photo indisponible, mannequin affiche.")
+    st.image(str(DEFAULT_PLAYER_PLACEHOLDER), use_column_width=True)
+    st.caption("Icone joueur affichee.")
 
 with c2:
     st.write(f"**Nom:** {player['full_name']}")

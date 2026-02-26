@@ -1,0 +1,21 @@
+{
+  "generated_at_utc": "2026-02-26T04:42:23Z",
+  "league": "ESP-La Liga",
+  "source_mode": "manual_csv",
+  "seasons_start_years": [
+    2022,
+    2023,
+    2024
+  ],
+  "season_labels": [
+    "2022-2023",
+    "2023-2024",
+    "2024-2025"
+  ],
+  "files": {
+    "player_match.csv": 150,
+    "player_season.csv": 15,
+    "regularity.csv": 15,
+    "progression.csv": 10
+  }
+}

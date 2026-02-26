@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import date, datetime
 from pathlib import Path
 
@@ -13,11 +14,7 @@ st.set_page_config(page_title="Football Data Platform", layout="wide")
 APP_DIR = Path(__file__).resolve().parent
 DEFAULT_PLAYER_PLACEHOLDER = APP_DIR / "assets" / "player-placeholder.svg"
 DEFAULT_LALIGA_BADGE = APP_DIR / "assets" / "laliga-badge.svg"
-WIKIPEDIA_API_URL = "https://en.wikipedia.org/w/api.php"
-PHOTO_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-}
+STUDY_FBREF_DIR = APP_DIR.parent / "data" / "study" / "fbref"
 VISUAL_COLORS = {
     "points": "#0E6FFF",
     "attack": "#1FA774",
@@ -179,99 +176,26 @@ def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
     return pd.DataFrame(rows).drop_duplicates(subset=["team_id"]).sort_values("team_name"), None
 
 
-def has_photo_url(value) -> bool:
-    return isinstance(value, str) and bool(value.strip())
-
-
-@st.cache_data(show_spinner=False, ttl=24 * 60 * 60)
-def fetch_image_bytes(url: str):
-    try:
-        response = requests.get(url, headers=PHOTO_HEADERS, timeout=12)
-    except requests.RequestException:
-        return None
-
-    content_type = (response.headers.get("content-type") or "").lower()
-    if response.status_code != 200 or not content_type.startswith("image/"):
-        return None
-    return response.content or None
-
-
 def laliga_logo_source():
     # Use a local wordmark asset (new LaLiga branding style) for a stable UI.
     return str(DEFAULT_LALIGA_BADGE)
 
 
 def render_team_hero(selected_team_name: str, season_label: str) -> None:
-    left, right = st.columns([5.0, 1.4], vertical_alignment="center")
-    with left:
-        title = "Vue equipe" if selected_team_name == "Tous les clubs" else f"Vue equipe - {selected_team_name}"
-        subtitle = (
-            f"LaLiga {season_label} | KPI, forme recente, domicile/exterieur et calendrier. "
-            "Selectionne un club pour une analyse detaillee."
-        )
-        st.markdown(
-            f"""
-            <div class="fdp-hero">
-              <div class="fdp-hero-title">{title}</div>
-              <div class="fdp-hero-sub">{subtitle}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with right:
-        st.image(laliga_logo_source(), use_column_width=True)
-
-
-@st.cache_data(show_spinner=False, ttl=24 * 60 * 60)
-def wikipedia_thumbnail_url(player_name: str):
-    if not player_name or not player_name.strip():
-        return None
-
-    params = {
-        "action": "query",
-        "generator": "search",
-        "gsrsearch": f"{player_name} footballer",
-        "gsrlimit": 1,
-        "prop": "pageimages",
-        "pithumbsize": 480,
-        "format": "json",
-    }
-    try:
-        response = requests.get(
-            WIKIPEDIA_API_URL,
-            params=params,
-            headers={"User-Agent": PHOTO_HEADERS["User-Agent"]},
-            timeout=12,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
-        return None
-
-    pages = (payload.get("query") or {}).get("pages") or {}
-    for page in pages.values():
-        thumb = (page or {}).get("thumbnail") or {}
-        src = thumb.get("source")
-        if isinstance(src, str) and src.startswith("http"):
-            return src
-    return None
-
-
-def player_image_source(player_name, photo_url):
-    if has_photo_url(photo_url):
-        img = fetch_image_bytes(photo_url.strip())
-        if img:
-            return img, "remote"
-
-    wiki_url = wikipedia_thumbnail_url(str(player_name))
-    if wiki_url:
-        img = fetch_image_bytes(wiki_url)
-        if img:
-            return img, "wiki"
-
-    if has_photo_url(photo_url):
-        return str(DEFAULT_PLAYER_PLACEHOLDER), "failed"
-    return str(DEFAULT_PLAYER_PLACEHOLDER), "missing"
+    title = "Vue equipe" if selected_team_name == "Tous les clubs" else f"Vue equipe - {selected_team_name}"
+    subtitle = (
+        f"LaLiga {season_label} | KPI, forme recente, domicile/exterieur et calendrier. "
+        "Selectionne un club pour une analyse detaillee."
+    )
+    st.markdown(
+        f"""
+        <div class="fdp-hero">
+          <div class="fdp-hero-title">{title}</div>
+          <div class="fdp-hero-sub">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 @st.cache_data(show_spinner=False, ttl=60 * 60)
@@ -314,13 +238,12 @@ def fetch_live_team_squad(team_id: int):
                 "birth_date": player.get("dateOfBirth"),
                 "team_id": int(team.get("id", team_id)),
                 "team_name": team.get("name"),
-                "photo_url": None,
             }
         )
 
     if not rows:
         return pd.DataFrame(columns=[
-            "player_id", "full_name", "position", "nationality", "birth_date", "team_id", "team_name", "photo_url"
+            "player_id", "full_name", "position", "nationality", "birth_date", "team_id", "team_name"
         ]), None
     return pd.DataFrame(rows), None
 
@@ -640,6 +563,525 @@ def add_podium_icons(df: pd.DataFrame, team_col: str = "Equipe") -> pd.DataFrame
     return out
 
 
+def add_podium_icons_generic(df: pd.DataFrame, label_col: str) -> pd.DataFrame:
+    if df is None or df.empty or label_col not in df.columns:
+        return df
+    out = df.copy()
+    icons = ["🥇", "🥈", "🥉"]
+    for idx, icon in enumerate(icons):
+        if idx >= len(out):
+            break
+        out.iloc[idx, out.columns.get_loc(label_col)] = f"{icon} {out.iloc[idx][label_col]}"
+    return out
+
+
+@st.cache_data(show_spinner=False, ttl=10 * 60)
+def load_fbref_study_datasets():
+    files = {
+        "player_match": STUDY_FBREF_DIR / "player_match.csv",
+        "player_season": STUDY_FBREF_DIR / "player_season.csv",
+        "regularity": STUDY_FBREF_DIR / "regularity.csv",
+        "progression": STUDY_FBREF_DIR / "progression.csv",
+        "meta": STUDY_FBREF_DIR / "meta.json",
+    }
+    if not files["regularity"].exists():
+        return None
+
+    data = {}
+    for key, path in files.items():
+        if key == "meta":
+            if path.exists():
+                try:
+                    data["meta"] = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    data["meta"] = None
+            else:
+                data["meta"] = None
+            continue
+        if path.exists():
+            data[key] = pd.read_csv(path)
+        else:
+            data[key] = pd.DataFrame()
+    return data
+
+
+def _season_label_from_start(start_year: int) -> str:
+    return f"{int(start_year)}-{int(start_year) + 1}"
+
+
+def _season_picker_label_from_start(start_year: int) -> str:
+    start_year = int(start_year)
+    return f"{start_year}/{str(start_year + 1)[-2:]}"
+
+
+def _study_expected_complete_seasons(n: int = 3) -> list[int]:
+    current_start = current_season_start_year_dash()
+    return [current_start - i for i in range(n, 0, -1)]
+
+
+def _render_study_scatter(df: pd.DataFrame, x_col: str, y_col: str, label_col: str, color_col: str) -> None:
+    if df is None or df.empty:
+        st.info("Aucune donnee pour ce graphique.")
+        return
+    chart = (
+        alt.Chart(df)
+        .mark_circle(size=90, opacity=0.85)
+        .encode(
+            x=alt.X(f"{x_col}:Q", title=x_col),
+            y=alt.Y(f"{y_col}:Q", title=y_col),
+            color=alt.Color(f"{color_col}:N", title="Poste"),
+            tooltip=[label_col, color_col, x_col, y_col],
+        )
+        .properties(height=340)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
+def render_player_study_tab() -> None:
+    st.header("Etude Joueurs (FBref - 3 saisons completes)")
+
+    study = load_fbref_study_datasets()
+    expected = _study_expected_complete_seasons(3)
+    expected_labels = ", ".join(_season_label_from_start(s) for s in expected)
+
+    if not study:
+        st.info(
+            "Donnees d'etude FBref non generees. Lance `make study-fbref` (scraping direct) "
+            "ou utilise le mode manuel CSV (`FBREF_STUDY_SOURCE=manual_csv`) puis rebuild le dashboard."
+        )
+        st.caption(
+            "Mode manuel: depose `data/study/fbref_input/player_match_manual.csv` "
+            "puis lance `make study-fbref-manual-docker`."
+        )
+        st.caption(f"Saisons ciblees (3 dernieres saisons completes): {expected_labels}")
+        return
+
+    meta = study.get("meta") or {}
+    reg_df = study.get("regularity", pd.DataFrame()).copy()
+    prog_df = study.get("progression", pd.DataFrame()).copy()
+    season_df = study.get("player_season", pd.DataFrame()).copy()
+    match_df = study.get("player_match", pd.DataFrame()).copy()
+
+    if reg_df.empty and prog_df.empty:
+        st.warning("Les fichiers FBref sont presents mais vides. Verifie l'extraction.")
+        return
+
+    generated_seasons = meta.get("season_labels") if isinstance(meta, dict) else None
+    if generated_seasons:
+        st.caption(
+            "Saisons etudiees (FBref, saisons completes hors saison en cours): "
+            + ", ".join(generated_seasons)
+        )
+    else:
+        st.caption(f"Saisons cibles (attendues): {expected_labels}")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Saisons", int(len(set(reg_df.get("season_start", pd.Series(dtype=int)).dropna().tolist()))))
+    c2.metric("Joueurs (regularite)", int(reg_df["player_id"].nunique()) if "player_id" in reg_df.columns else 0)
+    c3.metric("Lignes progression", int(len(prog_df)))
+    c4.metric("Matchs joueurs", int(len(match_df)) if not match_df.empty else 0)
+
+    season_candidates = set()
+    for df in (season_df, reg_df, prog_df):
+        if isinstance(df, pd.DataFrame) and (not df.empty) and ("season_start" in df.columns):
+            season_candidates.update(df["season_start"].dropna().astype(int).tolist())
+    available_seasons = sorted(season_candidates, reverse=True)
+    season_label_map = {_season_picker_label_from_start(s): s for s in available_seasons}
+    default_season_label = next(iter(season_label_map.keys()), None)
+
+    st.markdown("### Selection de l'etude")
+    sel1, sel2, sel3 = st.columns([0.32, 0.32, 0.36])
+    with sel1:
+        selected_global_season_label = (
+            st.selectbox("Saison", list(season_label_map.keys()), key="study_global_season")
+            if season_label_map
+            else None
+        )
+    selected_global_season = season_label_map.get(selected_global_season_label) if selected_global_season_label else None
+
+    players_for_selector = pd.DataFrame()
+    if not season_df.empty and selected_global_season is not None and "season_start" in season_df.columns:
+        players_for_selector = season_df[season_df["season_start"].astype(int) == int(selected_global_season)].copy()
+    elif not reg_df.empty and selected_global_season is not None and "season_start" in reg_df.columns:
+        players_for_selector = reg_df[reg_df["season_start"].astype(int) == int(selected_global_season)].copy()
+
+    if not players_for_selector.empty:
+        if "minutes_total" in players_for_selector.columns:
+            players_for_selector = players_for_selector.sort_values(
+                ["minutes_total", "player_name"], ascending=[False, True]
+            )
+        players_for_selector = players_for_selector.drop_duplicates(subset=["player_id"], keep="first")
+        players_for_selector["player_label"] = (
+            players_for_selector.get("player_name", pd.Series("", index=players_for_selector.index)).astype(str)
+            + " - "
+            + players_for_selector.get("team_name", pd.Series("", index=players_for_selector.index)).fillna("").astype(str)
+            + " ("
+            + players_for_selector.get("position_group", pd.Series("", index=players_for_selector.index)).fillna("").astype(str)
+            + ")"
+        ).str.replace("  ", " ", regex=False)
+
+        player_labels = players_for_selector["player_label"].tolist()
+        with sel2:
+            selected_player_label = st.selectbox(
+                "Joueur (clique / recherche)",
+                player_labels,
+                key="study_player_selector",
+            )
+        player_lookup = dict(zip(players_for_selector["player_label"], players_for_selector["player_id"]))
+        selected_player_id = player_lookup.get(selected_player_label)
+    else:
+        with sel2:
+            st.selectbox("Joueur (clique / recherche)", ["Aucun joueur disponible"], key="study_player_selector_empty")
+        selected_player_label = None
+        selected_player_id = None
+
+    position_options = ["Tous"] + sorted(
+        [p for p in reg_df.get("position_group", pd.Series(dtype=str)).dropna().astype(str).unique().tolist() if p]
+    )
+    with sel3:
+        selected_pos = st.selectbox("Poste (classement regularite)", position_options, key="study_regularite_position")
+
+    selected_season = selected_global_season
+
+    reg_scope = reg_df.copy()
+    if selected_season is not None:
+        reg_scope = reg_scope[reg_scope["season_start"].astype(int) == selected_season]
+    if selected_pos != "Tous":
+        reg_scope = reg_scope[reg_scope["position_group"] == selected_pos]
+
+    r1, r2 = st.columns([1.2, 1.8])
+    with r1:
+        st.subheader("Top regularite")
+        if reg_scope.empty:
+            st.info("Aucune donnee pour ce filtre.")
+        else:
+            top_reg = reg_scope.sort_values(
+                ["regularity_score", "ga_p90_mean", "minutes_total"], ascending=[False, False, False]
+            ).head(10).copy()
+            top_reg["Joueur"] = top_reg["player_name"].astype(str)
+            top_reg = add_podium_icons_generic(top_reg, "Joueur")
+            top_reg["Score"] = top_reg["regularity_score"].round(3)
+            top_reg["GA/90"] = top_reg["ga_p90_mean"].round(2)
+            top_reg["Variabilite"] = top_reg["stability_proxy"].round(2)
+            st.dataframe(
+                top_reg[["Joueur", "team_name", "position_group", "minutes_total", "GA/90", "Variabilite", "Score"]]
+                .rename(columns={"team_name": "Club", "position_group": "Poste", "minutes_total": "Min"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            bar_df = top_reg.copy()
+            bar_df["JoueurScore"] = bar_df["Joueur"]
+            render_sorted_bar_chart(bar_df, "JoueurScore", "regularity_score", descending=True, bar_color=VISUAL_COLORS["teal"])
+
+    with r2:
+        st.subheader("Performance vs variabilite")
+        if reg_scope.empty:
+            st.info("Aucune donnee pour ce filtre.")
+        else:
+            scatter_cols = ["player_name", "position_group", "ga_p90_mean", "stability_proxy"]
+            scatter_df = reg_scope[scatter_cols].copy().rename(
+                columns={
+                    "player_name": "Joueur",
+                    "position_group": "Poste",
+                    "ga_p90_mean": "Perf_GA90",
+                    "stability_proxy": "Variabilite",
+                }
+            )
+            _render_study_scatter(scatter_df, "Perf_GA90", "Variabilite", "Joueur", "Poste")
+            st.caption("Interpretation: plus a droite = meilleure production (GA/90), plus bas = plus regulier.")
+
+    st.divider()
+    st.subheader("Fiche joueur (selection par nom)")
+    if selected_player_id is None:
+        st.info("Selectionne une saison puis un joueur pour afficher sa performance et sa regularite.")
+    else:
+        player_season_rows = season_df[season_df["player_id"] == selected_player_id].copy() if not season_df.empty else pd.DataFrame()
+        if not player_season_rows.empty:
+            player_season_rows["season_start"] = player_season_rows["season_start"].astype(int)
+            player_season_rows = player_season_rows.sort_values("season_start", ascending=False)
+        player_reg_rows = reg_df[reg_df["player_id"] == selected_player_id].copy() if not reg_df.empty else pd.DataFrame()
+        player_prog_rows = prog_df[prog_df["player_id"] == selected_player_id].copy() if not prog_df.empty else pd.DataFrame()
+        player_match_rows = match_df[match_df["player_id"] == selected_player_id].copy() if not match_df.empty else pd.DataFrame()
+
+        player_season_row = pd.DataFrame()
+        if (not player_season_rows.empty) and (selected_season is not None):
+            player_season_row = player_season_rows[player_season_rows["season_start"] == int(selected_season)].head(1)
+        if player_season_row.empty and not player_season_rows.empty:
+            player_season_row = player_season_rows.head(1)
+
+        display_name = selected_player_label or "Joueur"
+        if not player_season_row.empty:
+            row0 = player_season_row.iloc[0]
+            display_name = f"{row0.get('player_name', display_name)} - {row0.get('team_name', '')} ({row0.get('position_group', '')})"
+
+        st.markdown(
+            f"<div class='fdp-hero'><div class='fdp-hero-title'>{display_name}</div>"
+            "<div class='fdp-hero-sub'>Performance, regularite et progression sur les 3 dernieres saisons completes.</div></div>",
+            unsafe_allow_html=True,
+        )
+
+        if not player_season_row.empty:
+            row0 = player_season_row.iloc[0]
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("Minutes", int(row0.get("minutes_total", 0)))
+            m2.metric("Matchs", int(row0.get("matches_played", 0)))
+            m3.metric("Titularisations", int(row0.get("starts", 0)))
+            m4.metric("G+A / 90", round(float(row0.get("ga_p90", 0.0)), 2))
+            m5.metric("Passes / 90", round(float(row0.get("passes_p90", 0.0)), 1))
+
+        tab_perf, tab_reg, tab_prog = st.tabs(["Performance", "Regularite", "Progression"])
+
+        with tab_perf:
+            if player_season_rows.empty:
+                st.info("Aucune donnee joueur-saison disponible.")
+            else:
+                season_perf = player_season_rows.copy()
+                season_perf["Saison"] = season_perf["season_start"].astype(int).map(_season_picker_label_from_start)
+                season_perf = season_perf.sort_values("season_start", ascending=True)
+
+                pcols = ["Saison", "team_name", "position_group", "minutes_total", "matches_played", "starts", "goals_total", "assists_total", "ga_total", "ga_p90", "passes_p90"]
+                available_pcols = [c for c in pcols if c in season_perf.columns]
+                perf_table = season_perf[available_pcols].rename(
+                    columns={
+                        "team_name": "Club",
+                        "position_group": "Poste",
+                        "minutes_total": "Min",
+                        "matches_played": "Matchs",
+                        "starts": "Tit.",
+                        "goals_total": "Buts",
+                        "assists_total": "Passes D",
+                        "ga_total": "G+A",
+                        "ga_p90": "G+A/90",
+                        "passes_p90": "Passes/90",
+                    }
+                )
+                st.dataframe(perf_table, use_container_width=True, hide_index=True)
+
+                if {"Saison", "G+A/90"}.issubset(perf_table.columns):
+                    season_line = season_perf[["Saison"]].copy()
+                    season_line["G+A/90"] = season_perf["ga_p90"].round(2)
+                    season_line["Passes/90"] = season_perf.get("passes_p90", pd.Series(0, index=season_perf.index)).round(1)
+                    line_long = season_line.melt("Saison", var_name="Metrique", value_name="Valeur")
+                    chart = (
+                        alt.Chart(line_long)
+                        .mark_line(point=True)
+                        .encode(
+                            x=alt.X("Saison:N", title="Saison"),
+                            y=alt.Y("Valeur:Q", title="Valeur"),
+                            color=alt.Color("Metrique:N", scale=alt.Scale(range=[VISUAL_COLORS["points"], VISUAL_COLORS["teal"]])),
+                            tooltip=["Saison", "Metrique", "Valeur"],
+                        )
+                        .properties(height=260)
+                    )
+                    st.altair_chart(chart, use_container_width=True)
+
+            if not player_match_rows.empty and selected_season is not None:
+                match_scope = player_match_rows[player_match_rows["season_start"].astype(int) == int(selected_season)].copy()
+                if not match_scope.empty:
+                    st.caption(f"Matchs (saison {selected_global_season_label})")
+                    if "date_id" in match_scope.columns:
+                        match_scope["date_id"] = pd.to_datetime(match_scope["date_id"], errors="coerce")
+                        match_scope = match_scope.sort_values("date_id")
+                        match_scope["Date"] = match_scope["date_id"].dt.strftime("%Y-%m-%d")
+                    else:
+                        match_scope["Date"] = range(1, len(match_scope) + 1)
+                    for col in ["ga_p90_match", "shots_p90_match", "passes_p90_match"]:
+                        if col not in match_scope.columns:
+                            match_scope[col] = 0.0
+                    match_long = match_scope[["Date", "ga_p90_match", "shots_p90_match"]].rename(
+                        columns={"ga_p90_match": "G+A/90", "shots_p90_match": "Tirs/90"}
+                    ).melt("Date", var_name="Metrique", value_name="Valeur")
+                    match_chart = (
+                        alt.Chart(match_long)
+                        .mark_line(point=True)
+                        .encode(
+                            x=alt.X("Date:N", title="Match"),
+                            y=alt.Y("Valeur:Q", title="Par 90"),
+                            color=alt.Color("Metrique:N", scale=alt.Scale(range=[VISUAL_COLORS["attack"], VISUAL_COLORS["violet"]])),
+                            tooltip=["Date", "Metrique", "Valeur"],
+                        )
+                        .properties(height=260)
+                    )
+                    st.altair_chart(match_chart, use_container_width=True)
+
+        with tab_reg:
+            if player_reg_rows.empty:
+                st.info("Aucune donnee de regularite pour ce joueur (souvent seuil de minutes non atteint).")
+            else:
+                player_reg_rows["season_start"] = player_reg_rows["season_start"].astype(int)
+                player_reg_rows = player_reg_rows.sort_values("season_start", ascending=False)
+                reg_current = (
+                    player_reg_rows[player_reg_rows["season_start"] == int(selected_season)].head(1)
+                    if selected_season is not None
+                    else pd.DataFrame()
+                )
+                if not reg_current.empty:
+                    rr = reg_current.iloc[0]
+                    rr1, rr2, rr3, rr4 = st.columns(4)
+                    rr1.metric("Rang regularite (poste)", int(rr.get("regularity_rank_pos", 0)))
+                    rr2.metric("Score regularite", round(float(rr.get("regularity_score", 0.0)), 3))
+                    rr3.metric("GA/90 moyen", round(float(rr.get("ga_p90_mean", 0.0)), 2))
+                    rr4.metric("Variabilite", round(float(rr.get("stability_proxy", 0.0)), 3))
+
+                reg_table = player_reg_rows.copy()
+                reg_table["Saison"] = reg_table["season_start"].map(_season_picker_label_from_start)
+                if "podium" in reg_table.columns:
+                    reg_table["Joueur"] = (reg_table["podium"].fillna("") + " " + reg_table["player_name"].astype(str)).str.strip()
+                reg_cols = ["Saison", "team_name", "position_group", "minutes_total", "regularity_rank_pos", "ga_p90_mean", "stability_proxy", "regularity_score"]
+                reg_cols = [c for c in reg_cols if c in reg_table.columns]
+                st.dataframe(
+                    reg_table[reg_cols].rename(
+                        columns={
+                            "team_name": "Club",
+                            "position_group": "Poste",
+                            "minutes_total": "Min",
+                            "regularity_rank_pos": "Rang poste",
+                            "ga_p90_mean": "GA/90 moyen",
+                            "stability_proxy": "Variabilite",
+                            "regularity_score": "Score",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with tab_prog:
+            if player_prog_rows.empty:
+                st.info("Aucune ligne de progression pour ce joueur (il faut 2 saisons eligibles).")
+            else:
+                player_prog_rows["season_start"] = player_prog_rows["season_start"].astype(int)
+                player_prog_rows = player_prog_rows.sort_values("season_start", ascending=False)
+                prog_current = (
+                    player_prog_rows[player_prog_rows["season_start"] == int(selected_season)].head(1)
+                    if selected_season is not None
+                    else pd.DataFrame()
+                )
+                if not prog_current.empty:
+                    pr = prog_current.iloc[0]
+                    pr1, pr2, pr3, pr4 = st.columns(4)
+                    pr1.metric("Score progression", round(float(pr.get("progress_score", 0.0)), 3))
+                    pr2.metric("Delta G+A/90", round(float(pr.get("delta_ga_p90", 0.0)), 2))
+                    pr3.metric("Delta Passes/90", round(float(pr.get("delta_passes_p90", 0.0)), 2))
+                    pr4.metric("Delta minutes", int(pr.get("delta_minutes_total", 0)))
+                else:
+                    st.caption("Pas de progression pour cette saison selectionnee (ex: premiere saison de la serie).")
+
+                prog_table = player_prog_rows.copy()
+                prog_table["Saison N"] = prog_table["season_start"].map(_season_picker_label_from_start)
+                if "podium" in prog_table.columns:
+                    prog_table["Joueur"] = (prog_table["podium"].fillna("") + " " + prog_table["player_name"].astype(str)).str.strip()
+                prog_cols = ["Saison N", "team_name", "position_group", "delta_ga_p90", "delta_passes_p90", "delta_pass_acc_mean", "delta_minutes_total", "progress_score", "progress_rank_pos"]
+                prog_cols = [c for c in prog_cols if c in prog_table.columns]
+                st.dataframe(
+                    prog_table[prog_cols].rename(
+                        columns={
+                            "team_name": "Club",
+                            "position_group": "Poste",
+                            "delta_ga_p90": "Delta GA/90",
+                            "delta_passes_p90": "Delta Passes/90",
+                            "delta_pass_acc_mean": "Delta Precision passes",
+                            "delta_minutes_total": "Delta Min",
+                            "progress_score": "Score",
+                            "progress_rank_pos": "Rang poste",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+    st.divider()
+    st.subheader("Progression / Regression (saison vs saison precedente)")
+    if prog_df.empty:
+        st.info("Donnees progression indisponibles.")
+        return
+
+    prog_seasons = sorted(prog_df["season_start"].dropna().astype(int).unique().tolist(), reverse=True)
+    prog_label_map = {_season_picker_label_from_start(s): s for s in prog_seasons}
+    p1, p2 = st.columns(2)
+    with p1:
+        selected_prog_label = st.selectbox(
+            "Saison progression (saison N)",
+            list(prog_label_map.keys()),
+            key="study_progression_season",
+        )
+    with p2:
+        prog_pos_options = ["Tous"] + sorted(
+            [p for p in prog_df.get("position_group", pd.Series(dtype=str)).dropna().astype(str).unique().tolist() if p]
+        )
+        selected_prog_pos = st.selectbox("Poste (progression)", prog_pos_options, key="study_progression_position")
+
+    selected_prog_season = prog_label_map.get(selected_prog_label) if selected_prog_label else None
+    prog_scope = prog_df.copy()
+    if selected_prog_season is not None:
+        prog_scope = prog_scope[prog_scope["season_start"].astype(int) == selected_prog_season]
+    if selected_prog_pos != "Tous":
+        prog_scope = prog_scope[prog_scope["position_group"] == selected_prog_pos]
+
+    ptop, pdrop = st.columns(2)
+    with ptop:
+        st.caption("Top progressions")
+        if prog_scope.empty:
+            st.info("Aucune donnee pour ce filtre.")
+        else:
+            top_prog = prog_scope.sort_values(["progress_score", "delta_ga_p90"], ascending=[False, False]).head(10).copy()
+            top_prog["Joueur"] = top_prog["player_name"].astype(str)
+            top_prog = add_podium_icons_generic(top_prog, "Joueur")
+            top_prog["Score"] = top_prog["progress_score"].round(3)
+            top_prog["Δ GA/90"] = top_prog["delta_ga_p90"].round(2)
+            top_prog["Δ Passes/90"] = top_prog["delta_passes_p90"].round(2)
+            st.dataframe(
+                top_prog[["Joueur", "team_name", "position_group", "minutes_total_prev", "minutes_total", "Δ GA/90", "Δ Passes/90", "Score"]]
+                .rename(columns={
+                    "team_name": "Club",
+                    "position_group": "Poste",
+                    "minutes_total_prev": "Min N-1",
+                    "minutes_total": "Min N",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+            bar_df = top_prog.copy()
+            bar_df["JoueurScore"] = bar_df["Joueur"]
+            render_sorted_bar_chart(bar_df, "JoueurScore", "progress_score", descending=True, bar_color=VISUAL_COLORS["attack"])
+
+    with pdrop:
+        st.caption("Top regressions")
+        if prog_scope.empty:
+            st.info("Aucune donnee pour ce filtre.")
+        else:
+            worst_prog = prog_scope.sort_values(["progress_score", "delta_ga_p90"], ascending=[True, True]).head(10).copy()
+            worst_prog["Joueur"] = worst_prog["player_name"].astype(str)
+            worst_prog["Score"] = worst_prog["progress_score"].round(3)
+            worst_prog["Δ GA/90"] = worst_prog["delta_ga_p90"].round(2)
+            worst_prog["Δ Passes/90"] = worst_prog["delta_passes_p90"].round(2)
+            st.dataframe(
+                worst_prog[["Joueur", "team_name", "position_group", "minutes_total_prev", "minutes_total", "Δ GA/90", "Δ Passes/90", "Score"]]
+                .rename(columns={
+                    "team_name": "Club",
+                    "position_group": "Poste",
+                    "minutes_total_prev": "Min N-1",
+                    "minutes_total": "Min N",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+            render_sorted_bar_chart(
+                worst_prog.assign(JoueurScore=worst_prog["Joueur"]),
+                "JoueurScore",
+                "progress_score",
+                descending=False,
+                signed_colors=True,
+            )
+
+    if not season_df.empty:
+        st.expander("Base joueurs-saison (aperçu)", expanded=False).dataframe(
+            season_df.head(100),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
 def upsert_players_to_db(engine_obj, players_df: pd.DataFrame) -> int:
     if players_df is None or players_df.empty:
         return 0
@@ -655,7 +1097,6 @@ def upsert_players_to_db(engine_obj, players_df: pd.DataFrame) -> int:
                 "position": row.get("position"),
                 "nationality": row.get("nationality"),
                 "birth_date": row.get("birth_date"),
-                "photo_url": row.get("photo_url"),
                 "team_id": int(row["team_id"]) if pd.notna(row.get("team_id")) else None,
             }
         )
@@ -667,14 +1108,13 @@ def upsert_players_to_db(engine_obj, players_df: pd.DataFrame) -> int:
         conn.execute(
             text(
                 """
-                INSERT INTO dim_player (player_id, full_name, position, nationality, birth_date, photo_url, team_id)
-                VALUES (:player_id, :full_name, :position, :nationality, :birth_date, :photo_url, :team_id)
+                INSERT INTO dim_player (player_id, full_name, position, nationality, birth_date, team_id)
+                VALUES (:player_id, :full_name, :position, :nationality, :birth_date, :team_id)
                 ON CONFLICT (player_id) DO UPDATE
                 SET full_name = EXCLUDED.full_name,
                     position = EXCLUDED.position,
                     nationality = EXCLUDED.nationality,
                     birth_date = EXCLUDED.birth_date,
-                    photo_url = COALESCE(dim_player.photo_url, EXCLUDED.photo_url),
                     team_id = EXCLUDED.team_id
                 """
             ),
@@ -748,8 +1188,12 @@ competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
 
 inject_dashboard_styles()
 
-st.title("Plateforme Data Football - LaLiga")
-st.caption(f"Saison en cours utilisee partout dans le dashboard: {current_season_label(season_start_year)}")
+header_left, header_right = st.columns([6.0, 1.3], vertical_alignment="center")
+with header_left:
+    st.title("Plateforme Data Football - LaLiga")
+    st.caption(f"Saison en cours utilisee partout dans le dashboard: {current_season_label(season_start_year)}")
+with header_right:
+    st.image(laliga_logo_source(), use_column_width=True)
 
 # -----------------------
 # Shared selectors / data
@@ -847,18 +1291,16 @@ if not df_matches.empty:
 players_query = """
 SELECT
   p.player_id, p.full_name, p.position, p.nationality, p.birth_date,
-  p.team_id, t.team_name, p.photo_url
+  p.team_id, t.team_name
 FROM dim_player p
 LEFT JOIN dim_team t ON t.team_id = p.team_id
 """
 df_players_all = pd.read_sql(text(players_query), engine)
 
 if not df_players_all.empty:
-    df_players_all["photo_rank"] = df_players_all["photo_url"].apply(lambda v: 1 if has_photo_url(v) else 0)
     df_players_all = (
-        df_players_all.sort_values(["team_name", "full_name", "photo_rank"], ascending=[True, True, False])
+        df_players_all.sort_values(["team_name", "full_name"], ascending=[True, True])
         .drop_duplicates(subset=["player_id"], keep="first")
-        .drop(columns=["photo_rank"])
         .reset_index(drop=True)
     )
 
@@ -897,10 +1339,10 @@ club_summary.loc[
 ] = "INCOMPLET"
 club_summary = club_summary.sort_values("team_name").reset_index(drop=True)
 
-tab_team, tab_standings, tab_clubs = st.tabs(["Equipe", "Ligue", "Clubs"])
+tab_team, tab_study, tab_standings, tab_clubs = st.tabs(["Equipe", "Etude Joueurs", "Ligue", "Clubs"])
 
 with tab_team:
-    st.header("Indicateurs equipe (Niveau A)")
+    st.header("Indicateurs equipe")
     render_team_hero(selected_team_name, current_season_label(season_start_year))
     st.caption(f"KPI filtres sur la saison {current_season_label(season_start_year)} (base locale)")
 
@@ -1062,6 +1504,9 @@ with tab_team:
                         hide_index=True,
                     )
 
+with tab_study:
+    render_player_study_tab()
+
 with tab_standings:
     st.header("Ligue - Classement et analyse (Saison en cours)")
 
@@ -1185,7 +1630,7 @@ with tab_standings:
                 st.subheader("Top 4")
                 st.dataframe(
                     style_ligue_table(
-                        add_leader_star(
+                        add_podium_icons(
                             standings_df.head(4)[["Pos", "Team", "Pts", "P", "W", "D", "L", "GF", "GA", "GD"]]
                             .rename(columns={"Team": "Equipe"})
                         )
@@ -1206,7 +1651,7 @@ with tab_standings:
 
             st.expander("Classement detaille", expanded=False).dataframe(
                 style_ligue_table(
-                    add_leader_star(
+                    add_podium_icons(
                         standings_df[["Pos", "Team", "Pts", "P", "W", "D", "L", "GF", "GA", "GD"]]
                         .rename(columns={"Team": "Equipe"})
                     )
@@ -1228,7 +1673,7 @@ with tab_clubs:
         top_cols = ["Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"]
         st.dataframe(
             style_ligue_table(
-                add_leader_star(league_local_all_season[top_cols].rename(columns={"Team": "Equipe"}))
+                add_podium_icons(league_local_all_season[top_cols].rename(columns={"Team": "Equipe"}))
             ),
             use_container_width=True,
             hide_index=True,

@@ -1,4 +1,4 @@
-.PHONY: up down init migrate run logs psql
+.PHONY: up down init migrate run study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker logs psql
 
 up:
 	docker compose up -d
@@ -20,6 +20,18 @@ migrate:
 
 run:
 	python -m src.run_pipeline
+
+study-fbref:
+	python -m src.study_fbref
+
+study-fbref-docker:
+	docker compose run --rm pipeline python -m src.study_fbref
+
+study-fbref-manual:
+	$env:FBREF_STUDY_SOURCE="manual_csv"; python -m src.study_fbref
+
+study-fbref-manual-docker:
+	docker compose run --rm -e FBREF_STUDY_SOURCE=manual_csv pipeline python -m src.study_fbref
 
 logs:
 	docker logs -f football_postgres

@@ -1,0 +1,5 @@
+season_start,match_id,date_id,competition,team_id,team_name,player_id,player_name,player_key,position,position_group,is_starting,minutes,goals,assists,shots,passes,pass_accuracy
+2022,2022-08-12|VAL|LEW|001,2022-08-12,La Liga (FBref manuel),1,FC Barcelona,1001,Robert Lewandowski,lewandowski|barcelona,FW,FWD,1,90,1,0,4,28,0.79
+2022,2022-08-12|VAL|PED|001,2022-08-12,La Liga (FBref manuel),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,84,0,1,2,56,0.89
+2023,2023-09-03|RMA|VIN|001,2023-09-03,La Liga (FBref manuel),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,88,1,0,5,31,0.76
+2024,2024-10-20|RMA|VIN|001,2024-10-20,La Liga (FBref manuel),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,2,1,6,29,0.81

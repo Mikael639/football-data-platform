@@ -1,17 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 420" role="img" aria-labelledby="title desc">
-  <title id="title">Player photo placeholder</title>
-  <desc id="desc">White mannequin silhouette used when no player photo is available.</desc>
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#cfd6de"/>
-      <stop offset="100%" stop-color="#b8c1cc"/>
-    </linearGradient>
-  </defs>
-  <rect width="320" height="420" fill="url(#bg)"/>
-  <circle cx="160" cy="130" r="62" fill="#ffffff" opacity="0.97"/>
-  <path d="M78 336c0-57 37-96 82-96h0c45 0 82 39 82 96v22H78z" fill="#ffffff" opacity="0.97"/>
-  <path d="M66 365c0-44 42-75 94-75s94 31 94 75v26H66z" fill="#ffffff" opacity="0.9"/>
-  <text x="160" y="398" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#5e6a78">
-    No Photo
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Icône joueur</title>
+  <desc id="desc">Silhouette de joueur en trait noir.</desc>
+  <rect width="128" height="128" fill="#ffffff"/>
+  <circle cx="64" cy="64" r="58" fill="none" stroke="#d9d9d9" stroke-width="1.5"/>
+  <circle cx="64" cy="40" r="15" fill="none" stroke="#2f2f2f" stroke-width="2"/>
+  <path d="M46 59c2.5 6 9 10 18 10s15.5-4 18-10" fill="none" stroke="#2f2f2f" stroke-width="2" stroke-linecap="round"/>
+  <path d="M34 104c1-17 13-29 30-29s29 12 30 29" fill="none" stroke="#2f2f2f" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M46 79l-7 10" fill="none" stroke="#2f2f2f" stroke-width="2" stroke-linecap="round"/>
+  <path d="M82 79l7 10" fill="none" stroke="#2f2f2f" stroke-width="2" stroke-linecap="round"/>
+  <path d="M31 103c-5-2-8-5-9-9" fill="none" stroke="#2f2f2f" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M97 103c5-2 8-5 9-9" fill="none" stroke="#2f2f2f" stroke-width="1.8" stroke-linecap="round"/>
 </svg>

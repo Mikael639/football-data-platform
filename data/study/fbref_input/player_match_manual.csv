@@ -1,0 +1,151 @@
+season_start,match_id,date_id,competition,team_id,team_name,player_id,player_name,player_key,position,position_group,is_starting,minutes,goals,assists,shots,passes,pass_accuracy
+2022,2022-LALIGA-DEMO-01-2001,2022-02-03,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,86,0,0,4,24,79.0%
+2022,2022-LALIGA-DEMO-01-1001,2022-02-03,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,89,1,0,5,18,76.0%
+2022,2022-LALIGA-DEMO-01-1002,2022-02-03,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,78,0,0,1,48,89.0%
+2022,2022-LALIGA-DEMO-01-2002,2022-02-03,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,84,0,0,1,45,86.0%
+2022,2022-LALIGA-DEMO-01-3001,2022-02-03,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,30,74.0%
+2022,2022-LALIGA-DEMO-02-2001,2022-03-05,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,89,0,0,4,27,80.0%
+2022,2022-LALIGA-DEMO-02-1001,2022-03-05,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,90,1,0,5,20,77.0%
+2022,2022-LALIGA-DEMO-02-1002,2022-03-05,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,81,0,0,1,51,90.0%
+2022,2022-LALIGA-DEMO-02-2002,2022-03-05,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,87,0,0,1,48,87.0%
+2022,2022-LALIGA-DEMO-02-3001,2022-03-05,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,32,75.0%
+2022,2022-LALIGA-DEMO-03-2001,2022-04-07,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,83,0,0,4,27,81.0%
+2022,2022-LALIGA-DEMO-03-1001,2022-04-07,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,86,1,0,5,21,78.0%
+2022,2022-LALIGA-DEMO-03-1002,2022-04-07,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,0,25,0,0,0,16,91.0%
+2022,2022-LALIGA-DEMO-03-2002,2022-04-07,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,0,31,0,0,0,18,88.0%
+2022,2022-LALIGA-DEMO-03-3001,2022-04-07,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,33,76.0%
+2022,2022-LALIGA-DEMO-04-2001,2023-05-09,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,86,1,0,4,22,77.0%
+2022,2022-LALIGA-DEMO-04-1001,2023-05-09,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,89,1,0,5,16,74.0%
+2022,2022-LALIGA-DEMO-04-1002,2023-05-09,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,78,0,0,2,46,87.0%
+2022,2022-LALIGA-DEMO-04-2002,2023-05-09,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,84,0,0,1,43,84.0%
+2022,2022-LALIGA-DEMO-04-3001,2023-05-09,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,28,72.0%
+2022,2022-LALIGA-DEMO-05-2001,2023-06-11,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,89,0,0,4,25,78.0%
+2022,2022-LALIGA-DEMO-05-1001,2023-06-11,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,90,1,0,5,18,75.0%
+2022,2022-LALIGA-DEMO-05-1002,2023-06-11,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,81,0,0,1,50,88.0%
+2022,2022-LALIGA-DEMO-05-2002,2023-06-11,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,87,0,0,1,46,85.0%
+2022,2022-LALIGA-DEMO-05-3001,2023-06-11,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,30,73.0%
+2022,2022-LALIGA-DEMO-06-2001,2023-07-13,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,83,0,0,3,25,79.0%
+2022,2022-LALIGA-DEMO-06-1001,2023-07-13,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,86,1,0,4,19,76.0%
+2022,2022-LALIGA-DEMO-06-1002,2023-07-13,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,75,0,0,1,48,89.0%
+2022,2022-LALIGA-DEMO-06-2002,2023-07-13,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,81,0,0,1,45,86.0%
+2022,2022-LALIGA-DEMO-06-3001,2023-07-13,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,31,74.0%
+2022,2022-LALIGA-DEMO-07-2001,2023-08-15,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,86,0,0,4,28,80.0%
+2022,2022-LALIGA-DEMO-07-1001,2023-08-15,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,89,1,0,5,22,77.0%
+2022,2022-LALIGA-DEMO-07-1002,2023-08-15,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,78,0,0,1,51,90.0%
+2022,2022-LALIGA-DEMO-07-2002,2023-08-15,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,84,0,0,1,49,87.0%
+2022,2022-LALIGA-DEMO-07-3001,2023-08-15,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,34,75.0%
+2022,2022-LALIGA-DEMO-08-2001,2023-09-17,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,89,1,0,4,23,81.0%
+2022,2022-LALIGA-DEMO-08-1001,2023-09-17,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,90,1,0,5,16,78.0%
+2022,2022-LALIGA-DEMO-08-1002,2023-09-17,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,0,31,0,0,1,18,91.0%
+2022,2022-LALIGA-DEMO-08-2002,2023-09-17,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,0,37,0,0,0,19,88.0%
+2022,2022-LALIGA-DEMO-08-3001,2023-09-17,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,28,76.0%
+2022,2022-LALIGA-DEMO-09-2001,2023-10-19,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,83,1,0,4,23,77.0%
+2022,2022-LALIGA-DEMO-09-1001,2023-10-19,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,86,1,0,5,17,74.0%
+2022,2022-LALIGA-DEMO-09-1002,2023-10-19,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,75,0,0,1,46,87.0%
+2022,2022-LALIGA-DEMO-09-2002,2023-10-19,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,81,0,0,1,43,84.0%
+2022,2022-LALIGA-DEMO-09-3001,2023-10-19,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,29,72.0%
+2022,2022-LALIGA-DEMO-10-2001,2023-11-21,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,86,0,0,3,26,78.0%
+2022,2022-LALIGA-DEMO-10-1001,2023-11-21,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,89,1,0,4,20,75.0%
+2022,2022-LALIGA-DEMO-10-1002,2023-11-21,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,78,0,0,1,49,88.0%
+2022,2022-LALIGA-DEMO-10-2002,2023-11-21,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,84,0,0,1,47,85.0%
+2022,2022-LALIGA-DEMO-10-3001,2023-11-21,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,32,73.0%
+2023,2023-LALIGA-DEMO-01-2001,2023-02-03,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,87,0,0,4,25,80.0%
+2023,2023-LALIGA-DEMO-01-1001,2023-02-03,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,0,0,4,19,78.0%
+2023,2023-LALIGA-DEMO-01-1002,2023-02-03,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,81,0,0,2,53,90.0%
+2023,2023-LALIGA-DEMO-01-2002,2023-02-03,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,85,0,0,1,47,87.0%
+2023,2023-LALIGA-DEMO-01-3001,2023-02-03,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,32,76.0%
+2023,2023-LALIGA-DEMO-02-2001,2023-03-05,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,0,0,4,28,81.0%
+2023,2023-LALIGA-DEMO-02-1001,2023-03-05,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,90,1,0,4,22,79.0%
+2023,2023-LALIGA-DEMO-02-1002,2023-03-05,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,84,0,0,2,57,91.0%
+2023,2023-LALIGA-DEMO-02-2002,2023-03-05,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,88,0,0,1,51,88.0%
+2023,2023-LALIGA-DEMO-02-3001,2023-03-05,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,34,77.0%
+2023,2023-LALIGA-DEMO-03-2001,2023-04-07,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,84,1,0,4,28,82.0%
+2023,2023-LALIGA-DEMO-03-1001,2023-04-07,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,1,0,4,22,80.0%
+2023,2023-LALIGA-DEMO-03-1002,2023-04-07,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,0,28,0,0,1,20,92.0%
+2023,2023-LALIGA-DEMO-03-2002,2023-04-07,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,0,32,0,0,0,19,89.0%
+2023,2023-LALIGA-DEMO-03-3001,2023-04-07,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,35,78.0%
+2023,2023-LALIGA-DEMO-04-2001,2024-05-09,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,87,1,0,4,23,78.0%
+2023,2023-LALIGA-DEMO-04-1001,2024-05-09,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,1,0,4,17,76.0%
+2023,2023-LALIGA-DEMO-04-1002,2024-05-09,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,81,0,0,2,51,88.0%
+2023,2023-LALIGA-DEMO-04-2002,2024-05-09,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,85,0,0,1,45,85.0%
+2023,2023-LALIGA-DEMO-04-3001,2024-05-09,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,30,74.0%
+2023,2023-LALIGA-DEMO-05-2001,2024-06-11,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,0,0,4,26,79.0%
+2023,2023-LALIGA-DEMO-05-1001,2024-06-11,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,90,0,0,4,20,77.0%
+2023,2023-LALIGA-DEMO-05-1002,2024-06-11,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,84,0,0,2,55,89.0%
+2023,2023-LALIGA-DEMO-05-2002,2024-06-11,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,88,0,0,1,49,86.0%
+2023,2023-LALIGA-DEMO-05-3001,2024-06-11,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,32,75.0%
+2023,2023-LALIGA-DEMO-06-2001,2024-07-13,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,84,0,0,4,26,80.0%
+2023,2023-LALIGA-DEMO-06-1001,2024-07-13,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,0,0,4,21,78.0%
+2023,2023-LALIGA-DEMO-06-1002,2024-07-13,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,78,0,0,1,53,90.0%
+2023,2023-LALIGA-DEMO-06-2002,2024-07-13,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,82,0,0,1,47,87.0%
+2023,2023-LALIGA-DEMO-06-3001,2024-07-13,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,33,76.0%
+2023,2023-LALIGA-DEMO-07-2001,2024-08-15,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,87,0,0,4,29,81.0%
+2023,2023-LALIGA-DEMO-07-1001,2024-08-15,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,1,0,4,23,79.0%
+2023,2023-LALIGA-DEMO-07-1002,2024-08-15,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,81,0,0,2,57,91.0%
+2023,2023-LALIGA-DEMO-07-2002,2024-08-15,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,85,0,0,1,51,88.0%
+2023,2023-LALIGA-DEMO-07-3001,2024-08-15,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,36,77.0%
+2023,2023-LALIGA-DEMO-08-2001,2024-09-17,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,1,0,4,24,82.0%
+2023,2023-LALIGA-DEMO-08-1001,2024-09-17,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,90,1,0,4,18,80.0%
+2023,2023-LALIGA-DEMO-08-1002,2024-09-17,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,0,34,0,0,1,22,92.0%
+2023,2023-LALIGA-DEMO-08-2002,2024-09-17,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,0,38,0,0,0,20,89.0%
+2023,2023-LALIGA-DEMO-08-3001,2024-09-17,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,30,78.0%
+2023,2023-LALIGA-DEMO-09-2001,2024-10-19,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,84,1,0,4,24,78.0%
+2023,2023-LALIGA-DEMO-09-1001,2024-10-19,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,1,0,4,19,76.0%
+2023,2023-LALIGA-DEMO-09-1002,2024-10-19,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,78,0,0,2,51,88.0%
+2023,2023-LALIGA-DEMO-09-2002,2024-10-19,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,82,0,0,1,46,85.0%
+2023,2023-LALIGA-DEMO-09-3001,2024-10-19,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,31,74.0%
+2023,2023-LALIGA-DEMO-10-2001,2024-11-21,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,87,0,0,4,27,79.0%
+2023,2023-LALIGA-DEMO-10-1001,2024-11-21,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,0,0,4,21,77.0%
+2023,2023-LALIGA-DEMO-10-1002,2024-11-21,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,81,0,0,1,55,89.0%
+2023,2023-LALIGA-DEMO-10-2002,2024-11-21,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,85,0,0,1,49,86.0%
+2023,2023-LALIGA-DEMO-10-3001,2024-11-21,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,34,75.0%
+2024,2024-LALIGA-DEMO-01-2001,2024-02-03,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,88,1,0,4,27,82.0%
+2024,2024-LALIGA-DEMO-01-1001,2024-02-03,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,0,0,3,20,79.0%
+2024,2024-LALIGA-DEMO-01-1002,2024-02-03,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,83,0,0,2,58,91.0%
+2024,2024-LALIGA-DEMO-01-2002,2024-02-03,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,86,0,0,1,50,88.0%
+2024,2024-LALIGA-DEMO-01-3001,2024-02-03,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,34,78.0%
+2024,2024-LALIGA-DEMO-02-2001,2024-03-05,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,1,0,4,30,83.0%
+2024,2024-LALIGA-DEMO-02-1001,2024-03-05,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,0,0,4,22,80.0%
+2024,2024-LALIGA-DEMO-02-1002,2024-03-05,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,86,0,0,2,62,92.0%
+2024,2024-LALIGA-DEMO-02-2002,2024-03-05,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,89,0,0,1,53,89.0%
+2024,2024-LALIGA-DEMO-02-3001,2024-03-05,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,36,79.0%
+2024,2024-LALIGA-DEMO-03-2001,2024-04-07,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,85,1,0,4,30,84.0%
+2024,2024-LALIGA-DEMO-03-1001,2024-04-07,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,81,1,0,3,22,81.0%
+2024,2024-LALIGA-DEMO-03-1002,2024-04-07,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,0,30,0,0,1,22,93.0%
+2024,2024-LALIGA-DEMO-03-2002,2024-04-07,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,0,33,0,0,0,21,90.0%
+2024,2024-LALIGA-DEMO-03-3001,2024-04-07,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,37,80.0%
+2024,2024-LALIGA-DEMO-04-2001,2025-05-09,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,88,1,0,5,25,80.0%
+2024,2024-LALIGA-DEMO-04-1001,2025-05-09,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,1,0,4,18,77.0%
+2024,2024-LALIGA-DEMO-04-1002,2025-05-09,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,83,0,0,2,56,89.0%
+2024,2024-LALIGA-DEMO-04-2002,2025-05-09,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,86,0,0,1,48,86.0%
+2024,2024-LALIGA-DEMO-04-3001,2025-05-09,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,32,76.0%
+2024,2024-LALIGA-DEMO-05-2001,2025-06-11,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,0,0,4,28,81.0%
+2024,2024-LALIGA-DEMO-05-1001,2025-06-11,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,0,0,3,20,78.0%
+2024,2024-LALIGA-DEMO-05-1002,2025-06-11,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,86,0,0,2,60,90.0%
+2024,2024-LALIGA-DEMO-05-2002,2025-06-11,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,89,0,0,1,51,87.0%
+2024,2024-LALIGA-DEMO-05-3001,2025-06-11,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,34,77.0%
+2024,2024-LALIGA-DEMO-06-2001,2025-07-13,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,85,1,0,4,28,82.0%
+2024,2024-LALIGA-DEMO-06-1001,2025-07-13,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,81,0,0,3,21,79.0%
+2024,2024-LALIGA-DEMO-06-1002,2025-07-13,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,80,0,0,2,58,91.0%
+2024,2024-LALIGA-DEMO-06-2002,2025-07-13,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,83,0,0,1,50,88.0%
+2024,2024-LALIGA-DEMO-06-3001,2025-07-13,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,35,78.0%
+2024,2024-LALIGA-DEMO-07-2001,2025-08-15,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,88,1,0,4,31,83.0%
+2024,2024-LALIGA-DEMO-07-1001,2025-08-15,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,0,0,3,23,80.0%
+2024,2024-LALIGA-DEMO-07-1002,2025-08-15,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,83,0,0,2,62,92.0%
+2024,2024-LALIGA-DEMO-07-2002,2025-08-15,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,86,0,0,1,54,89.0%
+2024,2024-LALIGA-DEMO-07-3001,2025-08-15,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,38,79.0%
+2024,2024-LALIGA-DEMO-08-2001,2025-09-17,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,90,1,0,5,26,84.0%
+2024,2024-LALIGA-DEMO-08-1001,2025-09-17,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,87,1,0,4,18,81.0%
+2024,2024-LALIGA-DEMO-08-1002,2025-09-17,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,0,36,0,0,1,24,93.0%
+2024,2024-LALIGA-DEMO-08-2002,2025-09-17,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,0,39,0,0,1,22,90.0%
+2024,2024-LALIGA-DEMO-08-3001,2025-09-17,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,32,80.0%
+2024,2024-LALIGA-DEMO-09-2001,2025-10-19,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,85,1,0,4,26,80.0%
+2024,2024-LALIGA-DEMO-09-1001,2025-10-19,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,81,1,0,3,19,77.0%
+2024,2024-LALIGA-DEMO-09-1002,2025-10-19,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,80,0,0,2,56,89.0%
+2024,2024-LALIGA-DEMO-09-2002,2025-10-19,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,83,0,0,1,48,86.0%
+2024,2024-LALIGA-DEMO-09-3001,2025-10-19,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,87,0,0,0,33,76.0%
+2024,2024-LALIGA-DEMO-10-2001,2025-11-21,La Liga (FBref manuel demo),2,Real Madrid,2001,Vinicius Junior,vinicius_junior|real_madrid,FW,FWD,1,88,0,0,4,29,81.0%
+2024,2024-LALIGA-DEMO-10-1001,2025-11-21,La Liga (FBref manuel demo),1,FC Barcelona,1001,Robert Lewandowski,robert_lewandowski|barcelona,FW,FWD,1,84,0,0,3,21,78.0%
+2024,2024-LALIGA-DEMO-10-1002,2025-11-21,La Liga (FBref manuel demo),1,FC Barcelona,1002,Pedri,pedri|barcelona,MF,MID,1,83,0,0,2,60,90.0%
+2024,2024-LALIGA-DEMO-10-2002,2025-11-21,La Liga (FBref manuel demo),2,Real Madrid,2002,Dani Carvajal,dani_carvajal|real_madrid,DF,DEF,1,86,0,0,1,52,87.0%
+2024,2024-LALIGA-DEMO-10-3001,2025-11-21,La Liga (FBref manuel demo),3,Atletico Madrid,3001,Jan Oblak,jan_oblak|atletico_madrid,GK,GK,1,90,0,0,0,36,77.0%
