@@ -1,4 +1,5 @@
 import os
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,7 @@ st.set_page_config(page_title="Joueurs - Plateforme Data Football", layout="wide
 PAGE_DIR = Path(__file__).resolve().parent
 DASHBOARD_DIR = PAGE_DIR.parent
 DEFAULT_PLAYER_PLACEHOLDER = DASHBOARD_DIR / "assets" / "player-placeholder.svg"
+STUDY_FBREF_DIR = DASHBOARD_DIR.parent / "data" / "study" / "fbref"
 
 
 def get_engine():
@@ -95,6 +97,101 @@ def fetch_live_team_squad(team_id: int):
             }
         )
     return pd.DataFrame(rows), None
+
+
+def _normalize_name(value: str | None) -> str:
+    if not value:
+        return ""
+    txt = unicodedata.normalize("NFKD", str(value))
+    txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
+    return " ".join(txt.lower().strip().split())
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def load_study_player_season_df():
+    supabase_db_url = os.getenv("SUPABASE_DB_URL") or os.getenv("STUDY_SUPABASE_DB_URL")
+    backend = (os.getenv("FBREF_STUDY_BACKEND") or "local").strip().lower()
+    if backend in {"supabase", "postgres"} and supabase_db_url:
+        try:
+            engine = create_engine(supabase_db_url, pool_pre_ping=True)
+            df = pd.read_sql(text("SELECT * FROM public.study_fbref_player_season"), engine)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                return df
+        except Exception:
+            pass
+    csv_path = STUDY_FBREF_DIR / "player_season.csv"
+    if csv_path.exists():
+        try:
+            return pd.read_csv(csv_path)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+
+def build_player_palmares(player_name: str, study_season_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int]]:
+    if study_season_df is None or study_season_df.empty:
+        return pd.DataFrame(), {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+    df = study_season_df.copy()
+    if "player_name" not in df.columns or "season_start" not in df.columns:
+        return pd.DataFrame(), {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+    df["__player_norm"] = df["player_name"].astype(str).map(_normalize_name)
+    target_norm = _normalize_name(player_name)
+    player_rows = df[df["__player_norm"] == target_norm].copy()
+    if player_rows.empty:
+        return pd.DataFrame(), {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+    metric_map = {
+        "Buts": "goals_total",
+        "Passes D": "assists_total",
+        "G+A": "ga_total",
+        "Buts (PK)": "pk_goals_total",
+        "Buts (hors PK)": "goals_non_pk_total",
+        "Jaunes": "yellow_cards_total",
+        "Rouges": "red_cards_total",
+    }
+    rows = []
+    for metric_label, metric_col in metric_map.items():
+        if metric_col not in df.columns:
+            continue
+        base = df[["season_start", "player_name", "team_name", metric_col]].copy()
+        base[metric_col] = pd.to_numeric(base[metric_col], errors="coerce").fillna(0)
+        base = base[base[metric_col] > 0].copy()
+        if base.empty:
+            continue
+        base["rank_saison"] = base.groupby("season_start")[metric_col].rank(method="dense", ascending=False)
+        top = base[base["rank_saison"] <= 3].copy()
+        top["__player_norm"] = top["player_name"].astype(str).map(_normalize_name)
+        top = top[top["__player_norm"] == target_norm].copy()
+        if top.empty:
+            continue
+        for _, r in top.iterrows():
+            medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(int(r["rank_saison"]), "")
+            season_start = int(r["season_start"])
+            rows.append(
+                {
+                    "Saison": f"{season_start}/{str(season_start + 1)[-2:]}",
+                    "Medaille": medal,
+                    "Categorie": metric_label,
+                    "Valeur": int(r[metric_col]) if float(r[metric_col]).is_integer() else round(float(r[metric_col]), 2),
+                    "Club": r.get("team_name"),
+                    "Rang": int(r["rank_saison"]),
+                    "season_sort": season_start,
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame(), {"gold": 0, "silver": 0, "bronze": 0, "total": 0}
+
+    out = pd.DataFrame(rows).sort_values(["season_sort", "Rang", "Categorie"], ascending=[False, True, True]).reset_index(drop=True)
+    counts = {
+        "gold": int((out["Rang"] == 1).sum()),
+        "silver": int((out["Rang"] == 2).sum()),
+        "bronze": int((out["Rang"] == 3).sum()),
+        "total": int(len(out)),
+    }
+    return out.drop(columns=["season_sort"]), counts
 
 
 engine = get_engine()
@@ -192,3 +289,22 @@ with c2:
     st.write(f"**Nationalite:** {player['nationality']}")
     st.write(f"**Club:** {player['team_name']}")
     st.write(f"**Date de naissance:** {player['birth_date']}")
+
+study_season_df = load_study_player_season_df()
+palmares_df, palmares_counts = build_player_palmares(str(player.get("full_name", "")), study_season_df)
+
+st.divider()
+st.subheader("Palmares du joueur (FBref - donnees d'etude)")
+if palmares_df.empty:
+    st.info("Aucun palmares Top 3 detecte pour ce joueur dans les donnees d'etude disponibles.")
+else:
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("Palmares total", palmares_counts["total"])
+    p2.metric("🥇 Or", palmares_counts["gold"])
+    p3.metric("🥈 Argent", palmares_counts["silver"])
+    p4.metric("🥉 Bronze", palmares_counts["bronze"])
+    st.dataframe(
+        palmares_df[["Saison", "Medaille", "Categorie", "Valeur", "Club"]],
+        use_container_width=True,
+        hide_index=True,
+    )

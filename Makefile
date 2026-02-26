@@ -1,4 +1,4 @@
-.PHONY: up down init migrate run study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker logs psql
+.PHONY: up down init migrate run study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker fbref-standard-supabase-import fbref-standard-supabase-import-docker fbref-matchlogs-export-local fbref-matchlogs-supabase-import fbref-matchlogs-supabase-import-docker logs psql
 
 up:
 	docker compose up -d
@@ -32,6 +32,21 @@ study-fbref-manual:
 
 study-fbref-manual-docker:
 	docker compose run --rm -e FBREF_STUDY_SOURCE=manual_csv pipeline python -m src.study_fbref
+
+fbref-standard-supabase-import:
+	python -m src.import_fbref_standard_to_supabase
+
+fbref-standard-supabase-import-docker:
+	docker compose run --rm pipeline python -m src.import_fbref_standard_to_supabase
+
+fbref-matchlogs-export-local:
+	python -m src.export_fbref_matchlogs_manual_csv
+
+fbref-matchlogs-supabase-import:
+	python -m src.import_fbref_match_logs_to_supabase
+
+fbref-matchlogs-supabase-import-docker:
+	docker compose run --rm pipeline python -m src.import_fbref_match_logs_to_supabase
 
 logs:
 	docker logs -f football_postgres

@@ -652,8 +652,16 @@ def _extract_fbref_raw(leagues: str, seasons: list[int]) -> tuple[pd.DataFrame, 
     except ImportError as exc:
         raise RuntimeError("soccerdata n'est pas installe. Ajoute la dependance puis relance.") from exc
 
-    logger.info("FBref extract start - league=%s seasons=%s", leagues, seasons)
-    fb = sd.FBref(leagues=leagues, seasons=seasons)
+    proxy = os.getenv("FBREF_PROXY") or None
+    no_cache = str(os.getenv("FBREF_NO_CACHE", "false")).strip().lower() in {"1", "true", "yes", "y"}
+    logger.info(
+        "FBref extract start - league=%s seasons=%s proxy=%s no_cache=%s",
+        leagues,
+        seasons,
+        bool(proxy),
+        no_cache,
+    )
+    fb = sd.FBref(leagues=leagues, seasons=seasons, proxy=proxy, no_cache=no_cache)
 
     match_stats = fb.read_player_match_stats(stat_type="summary")
     logger.info("FBref player match stats rows: %s", len(match_stats))

@@ -6,4 +6,5 @@ __pycache__
 .env
 data/raw/*
 !data/raw/fixtures_mock.json
+!data/raw/laliga_*_standard.csv
 data/processed/*
