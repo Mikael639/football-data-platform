@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 220" role="img" aria-labelledby="title desc">
+  <title id="title">LaLiga wordmark</title>
+  <desc id="desc">Clean LaLiga-style wordmark used in dashboard header.</desc>
+  <rect width="760" height="220" fill="transparent"/>
+  <g fill="#ff4b43">
+    <!-- simple icon inspired by current mark -->
+    <path d="M38 87l33-50h66l-45 67-49 27c-14-11-15-29-5-44z"/>
+    <path d="M84 128l53-80h44l-68 101-27 17c-17-8-17-24-2-38z"/>
+    <path d="M109 177l47-71h44l-70 90c-11 9-26 8-33-2-6-8-2-14 12-17z"/>
+    <text x="205" y="150" font-family="Arial Black, Arial, sans-serif" font-size="122" font-weight="900" letter-spacing="2">
+      LALIGA
+    </text>
+  </g>
+</svg>

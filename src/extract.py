@@ -1,9 +1,10 @@
 import os
 import json
+import time
 import requests
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 
 RAW_PATH = Path("data/raw/fixtures_mock.json")
 BASE_URL = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
@@ -34,9 +35,27 @@ def count_extracted(payload: Dict[str, Any]) -> int:
 # -----------------------
 def _fd_get(path: str, token: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = f"{BASE_URL}{path}"
-    r = requests.get(url, headers={"X-Auth-Token": token}, params=params, timeout=30)
-    r.raise_for_status()
-    return r.json()
+    max_retries = 3
+
+    for attempt in range(max_retries + 1):
+        r = requests.get(url, headers={"X-Auth-Token": token}, params=params, timeout=30)
+        if r.status_code != 429:
+            r.raise_for_status()
+            return r.json()
+
+        if attempt >= max_retries:
+            r.raise_for_status()
+
+        retry_after_raw = r.headers.get("Retry-After")
+        try:
+            retry_after = int(retry_after_raw) if retry_after_raw else 0
+        except ValueError:
+            retry_after = 0
+
+        wait_seconds = retry_after if retry_after > 0 else min(5 * (attempt + 1), 30)
+        time.sleep(wait_seconds)
+
+    raise RuntimeError("Unexpected retry loop exit in _fd_get")
 
 
 def current_season_start_year(today: date | None = None) -> int:
@@ -49,68 +68,84 @@ def current_season_start_year(today: date | None = None) -> int:
     return today.year if today.month >= 7 else today.year - 1
 
 
+def resolved_current_season_start_year() -> int:
+    """
+    Always use the current season start year derived from today's date.
+    This prevents stale .env values (e.g. previous season) from leaking into live extracts.
+    """
+    return current_season_start_year()
+
+
 # -----------------------
-# football-data extract (Real Madrid LaLiga current season, +- 60 days window)
+# football-data extract (all LaLiga clubs, current season)
 # -----------------------
-def extract_football_data_laliga_real_madrid() -> Dict[str, Any]:
+def extract_football_data_laliga_all_clubs() -> Dict[str, Any]:
     token = os.getenv("FOOTBALL_DATA_TOKEN")
     if not token:
         raise RuntimeError("Missing FOOTBALL_DATA_TOKEN in environment")
 
     competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
-    team_name = os.getenv("FOOTBALL_DATA_TEAM_NAME", "Real Madrid").strip().lower()
+    season = resolved_current_season_start_year()
 
-    season_env = os.getenv("FOOTBALL_DATA_SEASON")
-    season = int(season_env) if season_env else current_season_start_year()
-
-    # 1) Find Real Madrid team_id from competition teams
+    # 1) Get all teams in the competition for the current season
     teams_payload = _fd_get(f"/competitions/{competition_code}/teams", token, params={"season": season})
     teams = teams_payload.get("teams", [])
+    if not teams:
+        raise RuntimeError(f"No teams returned for competition={competition_code}, season={season}")
 
-    def is_team(t: Dict[str, Any]) -> bool:
-        name = (t.get("name") or "").strip().lower()
-        short = (t.get("shortName") or "").strip().lower()
-        tla = (t.get("tla") or "").strip().lower()
-        return team_name in name or team_name in short or team_name == tla
+    # 2) Get the squad for each club (one request per club)
+    squads_by_team = []
+    squad_fetch_errors = []
+    squad_rate_limited = False
+    for t in teams:
+        tid = t.get("id")
+        if tid is None:
+            continue
+        if squad_rate_limited:
+            squads_by_team.append({"team": t, "squad": []})
+            continue
+        try:
+            team_payload = _fd_get(f"/teams/{int(tid)}", token)
+            team_meta = team_payload.get("team") or t
+            squads_by_team.append(
+                {
+                    "team": team_meta,
+                    "squad": team_payload.get("squad", []),
+                }
+            )
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            squads_by_team.append({"team": t, "squad": []})
+            squad_fetch_errors.append({"team_id": int(tid), "status_code": status_code})
+            if status_code == 429:
+                squad_rate_limited = True
 
-    rm = next((t for t in teams if is_team(t)), None)
-    if not rm:
-        raise RuntimeError(f"Team not found in competition teams list: {team_name}")
-
-    team_id = int(rm["id"])
-
-    # 2) Get squad
-    team_payload = _fd_get(f"/teams/{team_id}", token)
-    squad = team_payload.get("squad", [])
-
-    # 3) Get matches in time window: last 60 days to next 60 days
-    today = datetime.utcnow().date()
-    date_from = (today - timedelta(days=60)).isoformat()
-    date_to = (today + timedelta(days=60)).isoformat()
-
+    # 3) Get all competition matches for the current season
     matches_payload = _fd_get(
         f"/competitions/{competition_code}/matches",
         token,
-        params={"season": season, "dateFrom": date_from, "dateTo": date_to},
+        params={"season": season},
     )
     matches = matches_payload.get("matches", [])
-
-    rm_matches = []
-    for m in matches:
-        home = m.get("homeTeam", {})
-        away = m.get("awayTeam", {})
-        if int(home.get("id", -1)) == team_id or int(away.get("id", -1)) == team_id:
-            rm_matches.append(m)
 
     return {
         "source": "football-data.org",
         "season": season,
         "competition_code": competition_code,
-        "team": rm,
-        "squad": squad,
-        "matches": rm_matches,
-        "window": {"dateFrom": date_from, "dateTo": date_to},
+        "competition": teams_payload.get("competition", {}),
+        "teams": teams,
+        "squads_by_team": squads_by_team,
+        "matches": matches,
+        "squad_fetch_errors": squad_fetch_errors,
     }
+
+
+def extract_football_data_laliga_real_madrid() -> Dict[str, Any]:
+    """
+    Backward-compatible name kept for existing imports.
+    Current behavior returns all LaLiga clubs for the current season.
+    """
+    return extract_football_data_laliga_all_clubs()
 
 
 def extract_laliga_standings_current_season() -> Dict[str, Any]:
@@ -120,8 +155,7 @@ def extract_laliga_standings_current_season() -> Dict[str, Any]:
 
     competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
 
-    season_env = os.getenv("FOOTBALL_DATA_SEASON")
-    season = int(season_env) if season_env else current_season_start_year()
+    season = resolved_current_season_start_year()
 
     standings_payload = _fd_get(
         f"/competitions/{competition_code}/standings",

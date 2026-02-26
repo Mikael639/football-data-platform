@@ -8,7 +8,7 @@ from src.utils.logger import get_logger
 
 from src.extract import (
     extract_from_mock,
-    extract_football_data_laliga_real_madrid,
+    extract_football_data_laliga_all_clubs,
     count_extracted,
 )
 from src.transform import transform, transform_football_data, count_loaded
@@ -58,7 +58,7 @@ def main():
             extracted = count_extracted(payload)
             transformed = transform(payload)
         else:
-            payload = extract_football_data_laliga_real_madrid()
+            payload = extract_football_data_laliga_all_clubs()
             extracted = count_extracted(payload)  # counts matches
             transformed = transform_football_data(payload)
 
@@ -70,7 +70,7 @@ def main():
         logger.info(f"Loaded rows: {loaded}")
 
         # Quality checks
-        run_quality_checks(engine, str(run_id))
+        run_quality_checks(engine, str(run_id), allow_empty_player_stats=(mode != "mock"))
         logger.info("Data quality checks: PASS")
 
         # Update SUCCESS

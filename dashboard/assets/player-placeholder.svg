@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 420" role="img" aria-labelledby="title desc">
+  <title id="title">Player photo placeholder</title>
+  <desc id="desc">White mannequin silhouette used when no player photo is available.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#cfd6de"/>
+      <stop offset="100%" stop-color="#b8c1cc"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="420" fill="url(#bg)"/>
+  <circle cx="160" cy="130" r="62" fill="#ffffff" opacity="0.97"/>
+  <path d="M78 336c0-57 37-96 82-96h0c45 0 82 39 82 96v22H78z" fill="#ffffff" opacity="0.97"/>
+  <path d="M66 365c0-44 42-75 94-75s94 31 94 75v26H66z" fill="#ffffff" opacity="0.9"/>
+  <text x="160" y="398" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#5e6a78">
+    No Photo
+  </text>
+</svg>

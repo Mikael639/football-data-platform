@@ -147,8 +147,10 @@ def transform(payload: Dict[str, Any]) -> Dict[str, Any]:
 def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
     matches = payload.get("matches", [])
     squad = payload.get("squad", [])
+    squads_by_team = payload.get("squads_by_team", [])
+    competition_meta = payload.get("competition", {}) or {}
+    competition_teams = payload.get("teams", [])
     competition_code = payload.get("competition_code", "PD")
-    season = payload.get("season", 2024)
 
     # dims containers
     dates: Set[str] = set()
@@ -159,14 +161,60 @@ def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
     fact_matches: List[Dict[str, Any]] = []
 
     # competition (minimal)
-    competitions[1] = {
-        "competition_id": 1,
-        "competition_name": competition_code,
-        "country": None,
+    comp_id = competition_meta.get("id")
+    competitions[_safe_int(comp_id, 1)] = {
+        "competition_id": _safe_int(comp_id, 1),
+        "competition_name": competition_meta.get("name") or competition_code,
+        "country": (competition_meta.get("area") or {}).get("name"),
     }
 
-    # players from squad
+    # teams from competition endpoint
+    for t in competition_teams:
+        if t.get("id") is None:
+            continue
+        tid = int(t["id"])
+        teams[tid] = {
+            "team_id": tid,
+            "team_name": t.get("name") or t.get("shortName"),
+            "country": (t.get("area") or {}).get("name"),
+        }
+
+    # players from multi-team squads (new payload shape)
+    for entry in squads_by_team:
+        team_meta = entry.get("team", {}) or {}
+        team_id_raw = team_meta.get("id")
+        if team_id_raw is None:
+            continue
+        team_id = int(team_id_raw)
+
+        teams.setdefault(
+            team_id,
+            {
+                "team_id": team_id,
+                "team_name": team_meta.get("name") or team_meta.get("shortName"),
+                "country": (team_meta.get("area") or {}).get("name"),
+            },
+        )
+
+        for p in entry.get("squad", []) or []:
+            if p.get("id") is None:
+                continue
+            pid = int(p["id"])
+            players[pid] = {
+                "player_id": pid,
+                "full_name": p.get("name"),
+                "position": p.get("position"),
+                "nationality": p.get("nationality"),
+                "birth_date": p.get("dateOfBirth"),
+                "photo_url": None,
+                "team_id": team_id,
+            }
+
+    # players from single-team squad (legacy payload shape)
+    legacy_team_id = _safe_int((payload.get("team") or {}).get("id"))
     for p in squad:
+        if p.get("id") is None or legacy_team_id == 0:
+            continue
         pid = int(p["id"])
         players[pid] = {
             "player_id": pid,
@@ -175,7 +223,7 @@ def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
             "nationality": p.get("nationality"),
             "birth_date": p.get("dateOfBirth"),
             "photo_url": None,
-            "team_id": int(payload["team"]["id"]),
+            "team_id": legacy_team_id,
         }
 
     # teams + matches
@@ -206,7 +254,7 @@ def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "match_id": match_id,
                 "date_id": date_id,
-                "competition_id": 1,
+                "competition_id": _safe_int(comp_id, 1),
                 "home_team_id": int(home["id"]),
                 "away_team_id": int(away["id"]),
                 "home_score": score.get("home"),
