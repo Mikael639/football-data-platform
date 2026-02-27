@@ -180,6 +180,40 @@ def _merge_replace_seasons(existing_df: pd.DataFrame, replacement_df: pd.DataFra
     return pd.concat([out, replacement_df], ignore_index=True, sort=False)
 
 
+def _dedupe_player_season_pk(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    out["minutes_total"] = pd.to_numeric(out.get("minutes_total"), errors="coerce").fillna(0)
+    out["matches_played"] = pd.to_numeric(out.get("matches_played"), errors="coerce").fillna(0)
+    out = out.sort_values(["season_start", "player_id", "minutes_total", "matches_played"], ascending=[True, True, False, False])
+    out = out.drop_duplicates(subset=["season_start", "player_id"], keep="first").reset_index(drop=True)
+    return out
+
+
+def _dedupe_regularity_pk(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    out["minutes_total"] = pd.to_numeric(out.get("minutes_total"), errors="coerce").fillna(0)
+    out["matches_played"] = pd.to_numeric(out.get("matches_played"), errors="coerce").fillna(0)
+    out["regularity_score"] = pd.to_numeric(out.get("regularity_score"), errors="coerce").fillna(0)
+    out = out.sort_values(
+        ["season_start", "player_id", "minutes_total", "matches_played", "regularity_score"],
+        ascending=[True, True, False, False, False],
+    )
+    out = out.drop_duplicates(subset=["season_start", "player_id"], keep="first").reset_index(drop=True)
+
+    # Recompute ranking after dedupe to keep consistent podium labels.
+    if "position_group" in out.columns and "regularity_score" in out.columns:
+        grp = ["season_start", "position_group"]
+        out["regularity_rank_pos"] = (
+            out.groupby(grp)["regularity_score"].rank(method="dense", ascending=False).astype(int)
+        )
+        out["podium"] = out["regularity_rank_pos"].map({1: "🥇", 2: "🥈", 3: "🥉"}).fillna("")
+    return out
+
+
 def _prepare_player_match_table(df_match: pd.DataFrame, source_file: str) -> pd.DataFrame:
     out = df_match.copy()
     out["source_mode"] = "manual_matchlog_csv"
@@ -286,21 +320,38 @@ def _strip_managed_cols(df: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     manual_match_csv = Path(os.getenv("FBREF_MATCHLOG_CSV") or "data/study/fbref_input/player_match_manual.csv")
     league_label = os.getenv("FBREF_MATCHLOG_LEAGUE_LABEL") or "La Liga (FBref manuel match logs)"
+    competition_filter = os.getenv("FBREF_MATCHLOG_COMPETITION") or "La Liga"
     min_minutes = int(os.getenv("FBREF_STUDY_MIN_MINUTES") or "600")
     season_filter = _parse_season_filter()
+    replace_global = str(os.getenv("FBREF_MATCHLOG_REPLACE_GLOBAL", "false")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
 
     if not manual_match_csv.exists():
         raise FileNotFoundError(f"CSV match logs introuvable: {manual_match_csv}")
 
+    raw = pd.read_csv(manual_match_csv)
+    df_match = _ensure_manual_match_columns(raw, league_label=league_label)
+    rows_before_comp_filter = len(df_match)
+    if "competition" in df_match.columns:
+        df_match = df_match[df_match["competition"].astype(str).str.strip() == competition_filter].copy()
+    if df_match.empty:
+        raise RuntimeError(
+            f"Aucune ligne match-log pour la competition cible '{competition_filter}'. "
+            "Verifie FBREF_MATCHLOG_COMPETITION ou le contenu du CSV."
+        )
     logger.info(
-        "Import FBref match logs -> Supabase start | csv=%s | min_minutes=%s | season_filter=%s",
+        "Import FBref match logs -> Supabase start | csv=%s | competition=%s | rows_before_comp_filter=%s | rows_after_comp_filter=%s | min_minutes=%s | season_filter=%s",
         manual_match_csv,
+        competition_filter,
+        rows_before_comp_filter,
+        len(df_match),
         min_minutes,
         season_filter,
     )
-
-    raw = pd.read_csv(manual_match_csv)
-    df_match = _ensure_manual_match_columns(raw, league_label=league_label)
     if season_filter:
         df_match = df_match[df_match["season_start"].astype(int).isin(season_filter)].copy()
     if df_match.empty:
@@ -316,6 +367,8 @@ def main() -> None:
 
     player_season = build_player_season(df_match)
     regularity = build_regularity(df_match, min_minutes=min_minutes)
+    player_season = _dedupe_player_season_pk(player_season)
+    regularity = _dedupe_regularity_pk(regularity)
     progression_all = _recompute_progression_with_existing(engine_obj, player_season, seasons, min_minutes=min_minutes)
 
     if not player_season.empty:
@@ -369,34 +422,44 @@ def main() -> None:
     merged_match = _merge_replace_seasons(existing_match, player_match_table, seasons)
     existing_reg = _load_existing_table(engine_obj, "study_fbref_regularity")
     merged_reg = _merge_replace_seasons(existing_reg, regularity, seasons)
-    existing_ps_all = _load_existing_table(engine_obj, "study_fbref_player_season")
-    merged_ps = _merge_replace_seasons(existing_ps_all, player_season, seasons)
+    merged_reg = _dedupe_regularity_pk(merged_reg)
+
+    merged_ps = pd.DataFrame()
+    if replace_global:
+        existing_ps_all = _load_existing_table(engine_obj, "study_fbref_player_season")
+        merged_ps = _merge_replace_seasons(existing_ps_all, player_season, seasons)
+        merged_ps = _dedupe_player_season_pk(merged_ps)
 
     with engine_obj.begin() as conn:
         conn.execute(text("DELETE FROM public.study_fbref_player_match"))
         conn.execute(text("DELETE FROM public.study_fbref_regularity"))
-        conn.execute(text("DELETE FROM public.study_fbref_player_season"))
-        conn.execute(text("DELETE FROM public.study_fbref_progression"))
+        if replace_global:
+            conn.execute(text("DELETE FROM public.study_fbref_player_season"))
+            conn.execute(text("DELETE FROM public.study_fbref_progression"))
 
     _append_table(engine_obj, "study_fbref_player_match", _strip_managed_cols(merged_match))
     _append_table(engine_obj, "study_fbref_regularity", _strip_managed_cols(merged_reg))
-    _append_table(engine_obj, "study_fbref_player_season", _strip_managed_cols(merged_ps))
-    _append_table(engine_obj, "study_fbref_progression", _strip_managed_cols(progression_all))
+    if replace_global:
+        _append_table(engine_obj, "study_fbref_player_season", _strip_managed_cols(merged_ps))
+        _append_table(engine_obj, "study_fbref_progression", _strip_managed_cols(progression_all))
     try:
         _build_meta_patch(engine_obj, seasons, len(player_match_table), len(regularity))
     except Exception:
         logger.exception("Meta patch skipped after match-log import")
 
     logger.info(
-        "Import FBref match logs -> Supabase done | seasons=%s | player_match(new=%s total=%s) regularity(new=%s total=%s) player_season(new=%s total=%s) progression(total=%s)",
+        "Import FBref match logs -> Supabase done | seasons=%s | replace_global=%s | player_match(new=%s total=%s) regularity(new=%s total=%s)%s",
         seasons,
+        replace_global,
         len(player_match_table),
         len(merged_match),
         len(regularity),
         len(merged_reg),
-        len(player_season),
-        len(merged_ps),
-        len(progression_all),
+        (
+            f" | player_season(new={len(player_season)} total={len(merged_ps)}) progression(total={len(progression_all)})"
+            if replace_global
+            else "",
+        ),
     )
 
 

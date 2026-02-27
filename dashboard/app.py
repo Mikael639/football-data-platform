@@ -5,8 +5,7 @@ import requests
 import streamlit as st
 from sqlalchemy import text
 
-from components.main_tabs import render_clubs_tab, render_ligue_tab, render_team_tab
-from components.study_players import render_player_study_tab as render_study_players_tab
+from components.main_tabs import render_clubs_tab, render_ligue_tab, render_player_details_tab, render_team_tab
 from data.dashboard_data import (
     build_local_league_table,
     build_team_match_view,
@@ -19,18 +18,12 @@ from data.dashboard_data import (
     get_engine,
     upsert_players_to_db,
 )
-from ui.charts import render_ppm_chart, render_result_distribution_chart, render_sorted_bar_chart
 from ui.labels import TAB_LABELS_MAIN
 from ui.display import (
-    add_leader_star,
-    add_podium_icons,
     laliga_logo_source,
-    render_form_timeline,
-    render_quality_badges,
     render_team_hero,
-    style_ligue_table,
 )
-from ui.styles import VISUAL_COLORS, inject_dashboard_styles
+from ui.styles import inject_dashboard_styles
 
 st.set_page_config(page_title="Football Data Platform", layout="wide")
 
@@ -192,7 +185,7 @@ club_summary.loc[
 ] = "INCOMPLET"
 club_summary = club_summary.sort_values("team_name").reset_index(drop=True)
 
-tab_team, tab_study, tab_standings, tab_clubs = st.tabs(TAB_LABELS_MAIN)
+tab_team, tab_standings, tab_clubs, tab_player_details = st.tabs(TAB_LABELS_MAIN)
 
 with tab_team:
     render_team_tab(
@@ -203,9 +196,6 @@ with tab_team:
         teams_df=teams_df,
         render_team_hero=render_team_hero,
     )
-
-with tab_study:
-    render_study_players_tab()
 
 with tab_standings:
     render_ligue_tab(
@@ -220,3 +210,6 @@ with tab_clubs:
         club_summary=club_summary,
         engine=engine,
     )
+
+with tab_player_details:
+    render_player_details_tab()
