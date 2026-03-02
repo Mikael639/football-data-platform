@@ -1,1 +1,1 @@
-TAB_LABELS_MAIN = ["Equipe", "Ligue", "Classement", "Details Joueurs"]
+TAB_LABELS_MAIN = ["Equipe", "Classement", "Clubs", "Details Joueurs"]

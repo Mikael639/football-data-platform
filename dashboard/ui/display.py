@@ -4,11 +4,15 @@ import pandas as pd
 import streamlit as st
 
 
-DEFAULT_LALIGA_BADGE = Path(__file__).resolve().parents[1] / "assets" / "laliga-badge.svg"
+ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
+DEFAULT_LALIGA_BADGE_PNG = ASSETS_DIR / "laliga-badge.png"
+DEFAULT_LALIGA_BADGE_SVG = ASSETS_DIR / "laliga-badge.svg"
 
 
 def laliga_logo_source() -> str:
-    return str(DEFAULT_LALIGA_BADGE)
+    if DEFAULT_LALIGA_BADGE_PNG.exists():
+        return str(DEFAULT_LALIGA_BADGE_PNG)
+    return str(DEFAULT_LALIGA_BADGE_SVG)
 
 
 def render_team_hero(selected_team_name: str, season_label: str) -> None:

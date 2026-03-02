@@ -196,7 +196,7 @@ def render_team_tab(
 
 
 
-def render_ligue_tab(
+def _render_ligue_tab_legacy(
     *,
     season_start_year,
     league_local_all_season,
@@ -454,6 +454,210 @@ def render_clubs_tab(
                     st.switch_page("pages/1_Joueurs.py")
 
 
+# Override de la version precedente: vue multi-ligues (LaLiga / Premier League / Serie A)
+def render_ligue_tab(
+    *,
+    season_start_year,
+    league_local_all_season,
+    selected_team_name,
+):
+    st.header("Classements - Saison en cours")
+    st.caption(f"Saison utilisee: {current_season_label(season_start_year)} (auto)")
+
+    token = os.getenv("FOOTBALL_DATA_TOKEN")
+    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
+
+    def _render_competition(
+        *,
+        label: str,
+        competition_code: str,
+        fallback_local_df: pd.DataFrame | None = None,
+        show_selected_team_info: bool = False,
+    ) -> None:
+        local_cols = ["Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"]
+        st.subheader(label)
+        st.caption(f"Classement actuel {label} - saison {current_season_label(season_start_year)}")
+
+        api_error_message = None
+        standings_df = None
+        standings_source = None
+
+        if token:
+            try:
+                response = requests.get(
+                    f"{base_url}/competitions/{competition_code}/standings",
+                    headers={"X-Auth-Token": token},
+                    params={"season": season_start_year},
+                    timeout=30,
+                )
+            except requests.RequestException as exc:
+                api_error_message = f"Echec de la requete classement: {exc}"
+            else:
+                if response.status_code != 200:
+                    api_error_message = f"Classement indisponible (status={response.status_code})."
+                else:
+                    data = response.json()
+                    total_table = None
+                    for standing in data.get("standings", []):
+                        if standing.get("type") == "TOTAL":
+                            total_table = standing.get("table", [])
+                            break
+
+                    if not total_table:
+                        api_error_message = "Aucun tableau TOTAL trouve."
+                    else:
+                        standings_df = pd.DataFrame(
+                            [
+                                {
+                                    "Pos": row.get("position"),
+                                    "Team": row.get("team", {}).get("name"),
+                                    "Pts": row.get("points"),
+                                    "P": row.get("playedGames"),
+                                    "W": row.get("won"),
+                                    "D": row.get("draw"),
+                                    "L": row.get("lost"),
+                                    "GF": row.get("goalsFor"),
+                                    "GA": row.get("goalsAgainst"),
+                                    "GD": row.get("goalDifference"),
+                                }
+                                for row in total_table
+                            ]
+                        )
+                        standings_source = "API live football-data.org"
+        else:
+            api_error_message = "FOOTBALL_DATA_TOKEN est absent dans le conteneur dashboard."
+
+        if (standings_df is None or standings_df.empty) and fallback_local_df is not None and not fallback_local_df.empty:
+            standings_df = fallback_local_df.copy()
+            standings_source = "Base locale (fallback)"
+            if "Pos" not in standings_df.columns:
+                standings_df.insert(0, "Pos", range(1, len(standings_df) + 1))
+            missing_cols = [c for c in local_cols if c not in standings_df.columns]
+            for col in missing_cols:
+                standings_df[col] = 0
+            standings_df = standings_df[["Pos"] + local_cols]
+
+        if standings_df is None or standings_df.empty:
+            if api_error_message:
+                st.warning(api_error_message)
+            st.info(f"Aucun classement disponible pour {label}.")
+            return
+
+        if api_error_message and standings_source == "Base locale (fallback)":
+            st.caption(f"API indisponible: {api_error_message}")
+        st.caption(f"Source des donnees ({label}): {standings_source}")
+
+        leader = standings_df.iloc[0]
+        best_attack = standings_df.sort_values(["GF", "Team"], ascending=[False, True]).iloc[0]
+        best_defense = standings_df.sort_values(["GA", "Team"], ascending=[True, True]).iloc[0]
+        best_gd = standings_df.sort_values(["GD", "Pts", "GF"], ascending=[False, False, False]).iloc[0]
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Leader", f"* {leader['Team']} ({int(leader['Pts'])} pts)")
+        c2.metric("Meilleure attaque", f"{best_attack['Team']} ({int(best_attack['GF'])} GF)")
+        c3.metric("Meilleure defense", f"{best_defense['Team']} ({int(best_defense['GA'])} GA)")
+        c4.metric("Meilleur diff.", f"{best_gd['Team']} ({int(best_gd['GD'])})")
+
+        if show_selected_team_info and selected_team_name != "Tous les clubs":
+            selected_row = standings_df[standings_df["Team"].str.contains(selected_team_name, case=False, na=False)]
+            if not selected_row.empty:
+                sr = selected_row.iloc[0]
+                gap = int(leader["Pts"]) - int(sr["Pts"])
+                st.info(
+                    f"{selected_team_name} | Pos {int(sr['Pos'])} | {int(sr['Pts'])} pts | "
+                    f"Ecart avec le leader: {gap} pts"
+                )
+
+        v1, v2 = st.columns(2)
+        with v1:
+            st.caption("Top 10 par points")
+            top10_pts = standings_df.sort_values(["Pts", "GD", "GF"], ascending=False).head(10)
+            render_sorted_bar_chart(top10_pts, "Team", "Pts", descending=True, bar_color=VISUAL_COLORS["points"])
+        with v2:
+            st.caption("Difference de buts (Top 10)")
+            top10_gd = standings_df.sort_values(["GD", "Pts", "GF"], ascending=False).head(10)
+            render_sorted_bar_chart(top10_gd, "Team", "GD", descending=True, signed_colors=True)
+
+        z1, z2 = st.columns(2)
+        with z1:
+            st.subheader("Top 4")
+            st.dataframe(
+                style_ligue_table(
+                    add_podium_icons(
+                        standings_df.head(4)[["Pos", "Team", "Pts", "P", "W", "D", "L", "GF", "GA", "GD"]]
+                        .rename(columns={"Team": "Equipe"})
+                    )
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+        with z2:
+            st.subheader("Zone de relegation (3 derniers)")
+            st.dataframe(
+                style_ligue_table(
+                    standings_df.tail(3)[["Pos", "Team", "Pts", "P", "W", "D", "L", "GF", "GA", "GD"]]
+                    .rename(columns={"Team": "Equipe"})
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.expander("Classement detaille", expanded=False).dataframe(
+            style_ligue_table(
+                add_podium_icons(
+                    standings_df[["Pos", "Team", "Pts", "P", "W", "D", "L", "GF", "GA", "GD"]]
+                    .rename(columns={"Team": "Equipe"})
+                )
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    tab_laliga, tab_pl, tab_sa, tab_bl, tab_l1 = st.tabs(
+        ["LaLiga", "Premier League", "Serie A", "Bundesliga", "Ligue 1"]
+    )
+
+    with tab_laliga:
+        _render_competition(
+            label="LaLiga",
+            competition_code="PD",
+            fallback_local_df=league_local_all_season,
+            show_selected_team_info=True,
+        )
+
+    with tab_pl:
+        _render_competition(
+            label="Premier League",
+            competition_code="PL",
+            fallback_local_df=None,
+            show_selected_team_info=False,
+        )
+
+    with tab_sa:
+        _render_competition(
+            label="Serie A",
+            competition_code="SA",
+            fallback_local_df=None,
+            show_selected_team_info=False,
+        )
+
+    with tab_bl:
+        _render_competition(
+            label="Bundesliga",
+            competition_code="BL1",
+            fallback_local_df=None,
+            show_selected_team_info=False,
+        )
+
+    with tab_l1:
+        _render_competition(
+            label="Ligue 1",
+            competition_code="FL1",
+            fallback_local_df=None,
+            show_selected_team_info=False,
+        )
+
+
 def render_player_details_tab() -> None:
     st.header("Details Joueurs")
     st.caption(
@@ -491,29 +695,111 @@ def render_player_details_tab() -> None:
         st.info("Aucune donnee joueurs disponible dans Supabase.")
         return
 
-    global_players = int(season_df["player_id"].nunique()) if (not season_df.empty and "player_id" in season_df.columns) else 0
-    match_players = int(match_df["player_id"].nunique()) if (not match_df.empty and "player_id" in match_df.columns) else 0
-    progression_rows = int(len(prog_df))
-    regularity_rows = int(len(reg_df))
+    tracked_player_ids: set[int] = set()
+    if not match_df.empty and "player_id" in match_df.columns:
+        tracked_player_ids = set(
+            pd.to_numeric(match_df["player_id"], errors="coerce").dropna().astype(int).tolist()
+        )
+
+    base_season = season_df.copy()
+    if not base_season.empty and "player_id" in base_season.columns:
+        base_season["player_id"] = pd.to_numeric(base_season["player_id"], errors="coerce").astype("Int64")
+        if tracked_player_ids:
+            base_season = base_season[base_season["player_id"].isin(list(tracked_player_ids))].copy()
+    if not base_season.empty and "season_start" in base_season.columns:
+        base_season["season_start"] = pd.to_numeric(base_season["season_start"], errors="coerce").astype("Int64")
+    for c in ["minutes_total", "goals_total", "assists_total", "ga_total", "ga_p90", "passes_p90", "matches_played"]:
+        if c in base_season.columns:
+            base_season[c] = pd.to_numeric(base_season[c], errors="coerce")
+    if not base_season.empty:
+        base_season["source_rank"] = 0
+
+    fallback_season = pd.DataFrame()
+    if not match_df.empty and "player_id" in match_df.columns:
+        m = match_df.copy()
+        m["player_id"] = pd.to_numeric(m["player_id"], errors="coerce").astype("Int64")
+        if tracked_player_ids:
+            m = m[m["player_id"].isin(list(tracked_player_ids))].copy()
+        if not m.empty:
+            m["season_start"] = pd.to_numeric(m.get("season_start"), errors="coerce").astype("Int64")
+            m["minutes"] = pd.to_numeric(m.get("minutes"), errors="coerce").fillna(0)
+            m["goals"] = pd.to_numeric(m.get("goals"), errors="coerce").fillna(0)
+            m["assists"] = pd.to_numeric(m.get("assists"), errors="coerce").fillna(0)
+            m["passes"] = pd.to_numeric(m.get("passes"), errors="coerce").fillna(0)
+            m = m.dropna(subset=["player_id", "season_start"])
+            if "team_name" not in m.columns:
+                m["team_name"] = "Inconnu"
+            if "position_group" not in m.columns:
+                m["position_group"] = "N/A"
+
+            fallback_season = (
+                m.groupby(
+                    ["player_id", "player_name", "team_name", "position_group", "season_start"],
+                    as_index=False,
+                )
+                .agg(
+                    minutes_total=("minutes", "sum"),
+                    goals_total=("goals", "sum"),
+                    assists_total=("assists", "sum"),
+                    passes_total=("passes", "sum"),
+                    matches_played=("player_id", "count"),
+                )
+            )
+            fallback_season["ga_total"] = fallback_season["goals_total"] + fallback_season["assists_total"]
+            fallback_season["ga_p90"] = np.where(
+                fallback_season["minutes_total"] > 0,
+                fallback_season["ga_total"] * 90.0 / fallback_season["minutes_total"],
+                0.0,
+            )
+            fallback_season["passes_p90"] = np.where(
+                fallback_season["minutes_total"] > 0,
+                fallback_season["passes_total"] * 90.0 / fallback_season["minutes_total"],
+                0.0,
+            )
+            fallback_season["source_rank"] = 1
+
+    base_global = pd.concat([base_season, fallback_season], ignore_index=True, sort=False)
+    if not base_global.empty:
+        base_global["team_name"] = base_global.get("team_name", pd.Series(dtype=str)).fillna("").astype(str)
+        base_global = base_global.sort_values("source_rank", ascending=True)
+        base_global = base_global.drop_duplicates(
+            subset=["player_id", "season_start", "team_name"],
+            keep="first",
+        )
+        base_global = base_global.drop(columns=["source_rank"], errors="ignore")
+
+    players_followed = int(len(tracked_player_ids)) if tracked_player_ids else int(
+        base_global["player_id"].nunique()
+    ) if (not base_global.empty and "player_id" in base_global.columns) else 0
+    seasons_covered = int(base_global["season_start"].nunique()) if (not base_global.empty and "season_start" in base_global.columns) else 0
+    clubs_covered = int(base_global["team_name"].astype(str).replace("", pd.NA).dropna().nunique()) if (not base_global.empty and "team_name" in base_global.columns) else 0
+    match_rows = int(len(match_df))
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Joueurs globaux (LaLiga)", global_players)
-    c2.metric("Joueurs suivis (match-by-match)", match_players)
-    c3.metric("Lignes progression", progression_rows)
-    c4.metric("Lignes regularite", regularity_rows)
+    c1.metric("Joueurs suivis", players_followed)
+    c2.metric("Saisons couvertes", seasons_covered)
+    c3.metric("Clubs couverts", clubs_covered)
+    c4.metric("Lignes match", match_rows)
 
     st.info(
-        "Filtrage dynamique par poste, club ou joueur. "
-        "Comparaison inter-saisons rapide. Detection de profils reguliers, emergents ou sous-cotes."
+        "Vue globale limitee aux joueurs suivis via tes CSV (match-by-match). "
+        "Filtres dynamiques par saison, club, poste et joueur. "
+        "Si un joueur suivi manque dans player_season, un fallback est calcule depuis ses matchs."
     )
+    if not tracked_player_ids:
+        st.warning(
+            "Aucun joueur suivi detecte dans la table match-by-match. "
+            "Importe d'abord les CSV joueurs pour alimenter cette vue."
+        )
 
-    global_tab, tracked_tab = st.tabs(["Vue globale LaLiga", "Joueur suivi (match-by-match)"])
+    global_tab, tracked_tab = st.tabs(["Vue globale (joueurs suivis)", "Joueur suivi (match-by-match)"])
 
     with global_tab:
-        if season_df.empty:
+        if base_global.empty:
             st.info("Aucune donnee globale joueurs-saison.")
         else:
-            base = season_df.copy()
+            base = base_global.copy()
+
             for col in [
                 "season_start",
                 "minutes_total",
@@ -563,6 +849,9 @@ def render_player_details_tab() -> None:
 
                 reg_scope = reg_df.copy()
                 if not reg_scope.empty:
+                    if tracked_player_ids and "player_id" in reg_scope.columns:
+                        reg_scope["player_id"] = pd.to_numeric(reg_scope["player_id"], errors="coerce").astype("Int64")
+                        reg_scope = reg_scope[reg_scope["player_id"].isin(list(tracked_player_ids))]
                     reg_scope = reg_scope[reg_scope["season_start"].astype(int) == current_season_for_profiles]
                     if selected_pos != "? Tous ?":
                         reg_scope = reg_scope[reg_scope["position_group"].astype(str) == selected_pos]
@@ -571,6 +860,9 @@ def render_player_details_tab() -> None:
 
                 prog_scope = prog_df.copy()
                 if not prog_scope.empty:
+                    if tracked_player_ids and "player_id" in prog_scope.columns:
+                        prog_scope["player_id"] = pd.to_numeric(prog_scope["player_id"], errors="coerce").astype("Int64")
+                        prog_scope = prog_scope[prog_scope["player_id"].isin(list(tracked_player_ids))]
                     if selected_pos != "? Tous ?":
                         prog_scope = prog_scope[prog_scope["position_group"].astype(str) == selected_pos]
                     if selected_club != "? Tous ?":
@@ -592,16 +884,34 @@ def render_player_details_tab() -> None:
                 under_pool = scope.copy()
                 under_pool["minutes_total"] = pd.to_numeric(under_pool["minutes_total"], errors="coerce").fillna(0)
                 under_pool["ga_p90"] = pd.to_numeric(under_pool.get("ga_p90"), errors="coerce").fillna(0)
-                under_pool = under_pool[(under_pool["minutes_total"] >= min_minutes) & (under_pool["minutes_total"] <= (min_minutes + 500))]
+                median_minutes = float(under_pool["minutes_total"].median()) if not under_pool.empty else 0.0
+                under_pool = under_pool[
+                    (under_pool["minutes_total"] >= min_minutes)
+                    & (under_pool["minutes_total"] <= median_minutes)
+                ]
                 if not under_pool.empty:
-                    u0 = under_pool.sort_values(["ga_p90", "minutes_total"], ascending=[False, True]).head(1).iloc[0]
+                    denom = max(median_minutes, 1.0)
+                    under_pool["under_score"] = under_pool["ga_p90"] * (
+                        1.0 - (under_pool["minutes_total"] / denom).clip(lower=0.0, upper=1.0)
+                    )
+                    u0 = under_pool.sort_values(["under_score", "ga_p90"], ascending=[False, False]).head(1).iloc[0]
                     under_name = str(u0.get("player_name", "N/A"))
-                    under_note = f"GA/90 {round(float(u0.get('ga_p90', 0.0)), 2)} avec {int(u0.get('minutes_total', 0))} min"
+                    under_note = (
+                        f"Score {round(float(u0.get('under_score', 0.0)), 2)} | "
+                        f"GA/90 {round(float(u0.get('ga_p90', 0.0)), 2)} | "
+                        f"{int(u0.get('minutes_total', 0))} min"
+                    )
 
-                p1, p2, p3 = st.columns(3)
-                p1.metric("Profil regulier", regular_name, regular_note)
-                p2.metric("Profil emergent", emergent_name, emergent_note)
-                p3.metric("Profil sous-cote", under_name, under_note)
+                st.subheader("Profils detectes (scope filtre)")
+                st.metric("Profil regulier", regular_name, regular_note)
+                st.caption("Critere: regularity_score le plus eleve (stabilite de performance).")
+                st.metric("Profil emergent", emergent_name, emergent_note)
+                st.caption("Critere: progression la plus forte via progress_score et delta GA/90.")
+                st.metric("Profil sous-cote", under_name, under_note)
+                st.caption(
+                    "Critere sous-cote: forte production (GA/90) avec temps de jeu plus faible "
+                    "(minutes <= mediane du scope filtre)."
+                )
 
                 agg = scope.groupby("player_name", as_index=False).agg(
                     goals_total=("goals_total", "sum"),
@@ -670,20 +980,46 @@ def render_player_details_tab() -> None:
                             max_val = float(chart_base[metric].max()) if chart_base[metric].notna().any() else 0.0
                             chart_base[metric] = chart_base[metric].fillna(0) / max_val if max_val > 0 else 0.0
                         long_comp = chart_base.melt("Saison", var_name="Metrique", value_name="Indice")
+                        metric_order = ["goals_total", "assists_total", "ga_total", "minutes_total"]
+                        metric_labels = {
+                            "goals_total": "Buts",
+                            "assists_total": "Passes D",
+                            "ga_total": "G+A",
+                            "minutes_total": "Minutes",
+                        }
+                        long_comp["MetriqueLabel"] = long_comp["Metrique"].map(metric_labels).fillna(long_comp["Metrique"])
 
-                        st.caption("Comparaison inter-saisons (indice normalise)")
-                        comp_chart = (
+                        st.caption("Comparaison inter-saisons (heatmap indice normalise)")
+                        heat = (
                             alt.Chart(long_comp)
-                            .mark_bar()
+                            .mark_rect(cornerRadius=4)
                             .encode(
-                                x=alt.X("Metrique:N", sort=["goals_total", "assists_total", "ga_total", "minutes_total"]),
-                                y=alt.Y("Indice:Q", stack="zero", title="Indice"),
-                                color=alt.Color("Saison:N"),
-                                tooltip=["Saison", "Metrique", alt.Tooltip("Indice:Q", format=".2f")],
+                                x=alt.X("Saison:N", title="Saison"),
+                                y=alt.Y(
+                                    "MetriqueLabel:N",
+                                    title="Metrique",
+                                    sort=[metric_labels[m] for m in metric_order],
+                                ),
+                                color=alt.Color("Indice:Q", title="Indice", scale=alt.Scale(scheme="teals")),
+                                tooltip=[
+                                    "Saison",
+                                    alt.Tooltip("MetriqueLabel:N", title="Metrique"),
+                                    alt.Tooltip("Indice:Q", format=".2f"),
+                                ],
                             )
-                            .properties(height=300)
+                            .properties(height=220)
                         )
-                        st.altair_chart(comp_chart, use_container_width=True)
+                        txt = (
+                            alt.Chart(long_comp)
+                            .mark_text(fontSize=11)
+                            .encode(
+                                x="Saison:N",
+                                y=alt.Y("MetriqueLabel:N", sort=[metric_labels[m] for m in metric_order]),
+                                text=alt.Text("Indice:Q", format=".2f"),
+                                color=alt.condition(alt.datum.Indice >= 0.65, alt.value("white"), alt.value("#102a43")),
+                            )
+                        )
+                        st.altair_chart(heat + txt, use_container_width=True)
 
                         profile_row = player_hist[player_hist["season_start"].astype(int) == int(selected_season)].head(1) if selected_season is not None else pd.DataFrame()
                         if profile_row.empty:
