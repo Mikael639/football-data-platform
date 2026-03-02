@@ -25,6 +25,12 @@ def test_settings_supports_legacy_pipeline_mode_alias():
     assert settings.data_mode == "mock"
 
 
+def test_settings_accepts_csv_mode():
+    settings = Settings.from_env({"DATA_MODE": "csv"})
+
+    assert settings.data_mode == "csv"
+
+
 def test_incremental_window_uses_today_minus_days_plus_one():
     window = calculate_incremental_window(days=14, today=date(2026, 3, 2))
 

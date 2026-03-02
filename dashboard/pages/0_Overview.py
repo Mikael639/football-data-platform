@@ -13,11 +13,14 @@ def _format_match_table(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     table = df.copy()
-    table["kickoff"] = pd.to_datetime(table["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
+    kickoff = pd.to_datetime(table["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
+    fallback = pd.to_datetime(table["match_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    table["kickoff"] = kickoff.fillna(fallback).fillna("Date inconnue")
     table["score"] = table.apply(
         lambda row: "-" if pd.isna(row["home_score"]) or pd.isna(row["away_score"]) else f"{int(row['home_score'])}-{int(row['away_score'])}",
         axis=1,
     )
+    table["status"] = table["status"].fillna("UNKNOWN")
     return table[["kickoff", "status", "matchday", "home_team", "score", "away_team"]]
 
 
@@ -28,7 +31,7 @@ def main() -> None:
 
     kpis = get_kpis(
         competition_id=filters.competition_id,
-        season_start=filters.season_start,
+        season=filters.season,
         team_id=filters.team_id,
         date_range=(filters.date_start, filters.date_end),
     )
@@ -40,7 +43,7 @@ def main() -> None:
     cols[3].metric("Goal Diff", kpis["goal_diff"])
     cols[4].metric("Win Rate", "-" if kpis["win_rate"] is None else f"{kpis['win_rate']}%")
 
-    standings = get_current_standings(filters.competition_id, filters.season_start)
+    standings = get_current_standings(filters.competition_id, filters.season)
     st.subheader("Classement courant")
     if standings.empty:
         st.info("Aucun snapshot de classement disponible pour ce filtre.")
@@ -66,7 +69,7 @@ def main() -> None:
         )
 
     st.subheader("Position au fil des journees")
-    curve = get_standings_curve(filters.competition_id, filters.season_start, filters.team_id)
+    curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)
     if curve.empty:
         st.info("Pas de donnees suffisantes pour tracer la courbe de classement.")
     else:
@@ -75,7 +78,7 @@ def main() -> None:
     st.subheader("Calendrier")
     recent_matches, upcoming_matches = get_recent_matches(
         competition_id=filters.competition_id,
-        season_start=filters.season_start,
+        season=filters.season,
         team_id=filters.team_id,
         date_range=(filters.date_start, filters.date_end),
         recent_limit=10,

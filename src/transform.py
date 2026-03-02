@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date as date_cls
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,7 +12,7 @@ TransformedData = dict[str, TableRows]
 
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
-        if value is None:
+        if value is None or value == "":
             return default
         return int(value)
     except Exception:
@@ -20,7 +21,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _safe_float_ratio(value: Any) -> float:
     try:
-        if value is None:
+        if value is None or value == "":
             return 0.0
         parsed = float(value)
         return max(0.0, min(parsed, 1.0))
@@ -41,6 +42,34 @@ def _parse_utc_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def _season_label_from_date_value(value: Any) -> str | None:
+    if value in {None, ""}:
+        return None
+    if isinstance(value, datetime):
+        match_date = value.date()
+    elif isinstance(value, date_cls):
+        match_date = value
+    else:
+        text = str(value)
+        try:
+            match_date = datetime.fromisoformat(text[:10]).date()
+        except ValueError:
+            return None
+    if match_date.month >= 7:
+        return f"{match_date.year}-{match_date.year + 1}"
+    return f"{match_date.year - 1}-{match_date.year}"
+
+
+def _season_label_from_start_year(value: Any) -> str | None:
+    if value in {None, ""}:
+        return None
+    try:
+        start_year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return f"{start_year}-{start_year + 1}"
 
 
 def _build_dim_date(date_values: set[str]) -> TableRows:
@@ -100,7 +129,7 @@ def _update_mock_teams(home_team: Record, away_team: Record, teams: dict[int, Re
         teams[team_id] = _build_mock_team_row(team)
 
 
-def _build_mock_match_row(fixture: Record, home_team: Record, away_team: Record) -> Record:
+def _build_mock_match_row(fixture: Record, payload: Payload, home_team: Record, away_team: Record) -> Record:
     score = fixture.get("score", {})
     return {
         "match_id": _safe_int(fixture.get("match_id")),
@@ -111,6 +140,9 @@ def _build_mock_match_row(fixture: Record, home_team: Record, away_team: Record)
         "status": fixture.get("status"),
         "matchday": fixture.get("matchday"),
         "kickoff_utc": _parse_utc_datetime(fixture.get("kickoff_utc") or fixture.get("utc_date")),
+        "season": fixture.get("season")
+        or payload.get("season")
+        or _season_label_from_date_value(fixture.get("date")),
         "home_score": _safe_int(score.get("home")),
         "away_score": _safe_int(score.get("away")),
     }
@@ -212,7 +244,7 @@ def transform(payload: Payload) -> TransformedData:
         away_team = fixture.get("away_team", {})
         _update_mock_teams(home_team, away_team, teams)
 
-        matches.append(_build_mock_match_row(fixture, home_team, away_team))
+        matches.append(_build_mock_match_row(fixture, payload, home_team, away_team))
         player_match_stats.extend(_build_mock_player_stats(fixture, players))
 
     competition_id = next(iter(competitions)) if competitions else _safe_int(payload.get("competition_id"), 1)
@@ -328,7 +360,12 @@ def _update_match_teams(home_team: Record, away_team: Record, teams: dict[int, R
         }
 
 
-def _build_football_data_match_row(match: Record, competition_id: int, date_values: set[str]) -> Record:
+def _build_football_data_match_row(
+    match: Record,
+    competition_id: int,
+    date_values: set[str],
+    season_label: str | None,
+) -> Record:
     utc_date = match.get("utcDate")
     date_id = utc_date[:10] if utc_date else None
     if date_id:
@@ -347,6 +384,7 @@ def _build_football_data_match_row(match: Record, competition_id: int, date_valu
         "status": match.get("status"),
         "matchday": match.get("matchday"),
         "kickoff_utc": _parse_utc_datetime(utc_date),
+        "season": season_label or _season_label_from_date_value(date_id),
         "home_score": score.get("home"),
         "away_score": score.get("away"),
     }
@@ -399,6 +437,7 @@ def transform_football_data(payload: Payload) -> TransformedData:
     competition_meta = payload.get("competition", {}) or {}
     competition_teams = payload.get("teams", [])
     competition_code = payload.get("competition_code", "PD")
+    season_label = _season_label_from_start_year(payload.get("season"))
 
     date_values: set[str] = set()
     teams: dict[int, Record] = {}
@@ -415,7 +454,7 @@ def transform_football_data(payload: Payload) -> TransformedData:
         home_team = match.get("homeTeam", {})
         away_team = match.get("awayTeam", {})
         _update_match_teams(home_team, away_team, teams)
-        fact_matches.append(_build_football_data_match_row(match, competition_id, date_values))
+        fact_matches.append(_build_football_data_match_row(match, competition_id, date_values, season_label))
 
     extracted_at = _parse_utc_datetime(payload.get("extracted_at_utc"))
 
@@ -427,6 +466,59 @@ def transform_football_data(payload: Payload) -> TransformedData:
         "fact_match": fact_matches,
         "fact_player_match_stats": [],
         "fact_standings_snapshot": _extract_standings_snapshot(payload, competition_id, extracted_at),
+    }
+
+
+def transform_csv_to_tables(payload: Payload) -> TransformedData:
+    competition_meta = payload.get("competition", {}) or {}
+    competition_code = payload.get("competition_code", "PD")
+    competition_id = _safe_int(competition_meta.get("id"), 1)
+    competition_rows = _build_competition_rows(competition_meta, competition_code)
+
+    date_values: set[str] = set()
+    teams: dict[int, Record] = {}
+    fact_matches: TableRows = []
+
+    for team in payload.get("teams", []):
+        team_id = _safe_int(team.get("id"))
+        if team_id == 0:
+            continue
+        teams[team_id] = {
+            "team_id": team_id,
+            "team_name": team.get("name") or team.get("shortName"),
+            "country": (team.get("area") or {}).get("name"),
+            "crest_url": team.get("crest"),
+            "short_name": team.get("shortName"),
+        }
+
+    for match in payload.get("match_candidates", []):
+        date_id = str(match.get("date_id"))
+        if date_id:
+            date_values.add(date_id)
+        fact_matches.append(
+            {
+                "match_id": _safe_int(match.get("match_id")),
+                "date_id": date_id,
+                "competition_id": competition_id,
+                "home_team_id": _safe_int(match.get("home_team_id")),
+                "away_team_id": _safe_int(match.get("away_team_id")),
+                "status": match.get("status"),
+                "matchday": match.get("matchday"),
+                "kickoff_utc": _parse_utc_datetime(match.get("kickoff_utc")),
+                "season": match.get("season") or _season_label_from_date_value(date_id),
+                "home_score": match.get("home_score"),
+                "away_score": match.get("away_score"),
+            }
+        )
+
+    return {
+        "dim_date": _build_dim_date(date_values),
+        "dim_team": list(teams.values()),
+        "dim_competition": list(competition_rows.values()),
+        "dim_player": [],
+        "fact_match": fact_matches,
+        "fact_player_match_stats": [],
+        "fact_standings_snapshot": [],
     }
 
 

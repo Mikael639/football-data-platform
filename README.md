@@ -27,6 +27,7 @@ Important environment variables:
 - `DATA_MODE` is the new canonical runtime mode. `PIPELINE_MODE` is still supported as a legacy alias.
 - `PIPELINE_MODE=mock` runs the local mock payload.
 - `PIPELINE_MODE=api` uses `football-data.org`.
+- `DATA_MODE=csv` loads historical La Liga matches from `data/raw/*_cleaned.csv`.
 - `INCREMENTAL=true` limits API match extraction to the rolling `INCREMENTAL_DAYS` window.
 - `DB_*` controls the local PostgreSQL connection for pipeline and dashboard.
 - `DATABASE_URL` can override the computed PostgreSQL URL when needed.
@@ -60,6 +61,25 @@ docker compose run --rm pipeline python -m src.run_pipeline
 ```
 
 The pipeline persists runtime timings and row volumes into `pipeline_run_log.metrics_jsonb` and `pipeline_run_log.volumes_jsonb`.
+
+## CSV Historical Mode
+
+`DATA_MODE=csv` expects player match-log files under `data/raw/*_cleaned.csv`.
+The parser validates these minimum columns:
+
+- `Date`
+- `Comp`
+- `Round`
+- `Venue`
+- `Result`
+- `Squad`
+- `Opponent`
+
+Only `La Liga` rows are loaded in this mode. Match rows are deduplicated from player-level logs using:
+
+`(season, comp, date, squad, opponent, venue)`
+
+When the CSV does not contain a kickoff time, the pipeline stores `kickoff_utc` at `12:00:00Z` for that match date to keep the warehouse and dashboard usable.
 
 Start the dashboard:
 

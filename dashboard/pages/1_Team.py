@@ -36,11 +36,14 @@ def _format_team_calendar(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     out = df.copy()
-    out["kickoff"] = pd.to_datetime(out["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
+    kickoff = pd.to_datetime(out["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
+    fallback = pd.to_datetime(out["date_dt"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["kickoff"] = kickoff.fillna(fallback).fillna("Date inconnue")
     out["score"] = out.apply(
         lambda row: "-" if pd.isna(row["goals_for"]) or pd.isna(row["goals_against"]) else f"{int(row['goals_for'])}-{int(row['goals_against'])}",
         axis=1,
     )
+    out["result"] = out["result"].fillna("-")
     return out[["kickoff", "venue", "opponent_name", "score", "result", "points"]]
 
 
@@ -55,14 +58,14 @@ def main() -> None:
     team = get_team_meta(filters.team_id)
     render_team_header(team)
 
-    kpis = get_kpis(filters.competition_id, filters.season_start, filters.team_id, (filters.date_start, filters.date_end))
+    kpis = get_kpis(filters.competition_id, filters.season, filters.team_id, (filters.date_start, filters.date_end))
     top = st.columns(4)
     top[0].metric("Points", kpis["points"])
     top[1].metric("Matches", kpis["matches"])
     top[2].metric("Goal Diff", kpis["goal_diff"])
     top[3].metric("Win Rate", "-" if kpis["win_rate"] is None else f"{kpis['win_rate']}%")
 
-    base_matches = get_matches(filters.competition_id, filters.season_start, filters.team_id, filters.date_start, filters.date_end)
+    base_matches = get_matches(filters.competition_id, filters.season, filters.team_id, filters.date_start, filters.date_end)
     perspective = build_perspective_table(base_matches, team_id=filters.team_id)
     form5 = _prepare_form_df(perspective, 5)
     form10 = _prepare_form_df(perspective, 10)
@@ -77,7 +80,7 @@ def main() -> None:
         render_form_chart(form10)
 
     st.subheader("Domicile / Exterieur")
-    split = get_home_away_split(filters.competition_id, filters.season_start, filters.team_id, (filters.date_start, filters.date_end))
+    split = get_home_away_split(filters.competition_id, filters.season, filters.team_id, (filters.date_start, filters.date_end))
     if split.empty:
         st.info("Aucun match joue pour calculer le split domicile/exterieur.")
     else:
@@ -90,7 +93,7 @@ def main() -> None:
     st.subheader("Calendrier")
     recent, upcoming = get_recent_matches(
         competition_id=filters.competition_id,
-        season_start=filters.season_start,
+        season=filters.season,
         team_id=filters.team_id,
         date_range=(filters.date_start, filters.date_end),
         recent_limit=10,
@@ -120,7 +123,7 @@ def main() -> None:
             st.dataframe(_format_team_calendar(upcoming_view), hide_index=True, use_container_width=True)
 
     st.subheader("Courbe de classement")
-    curve = get_standings_curve(filters.competition_id, filters.season_start, filters.team_id)
+    curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)
     if curve.empty:
         st.info("Pas de donnees de classement pour cette equipe.")
     else:

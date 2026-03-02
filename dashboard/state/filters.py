@@ -6,7 +6,6 @@ import streamlit as st
 
 from data.dashboard_data import (
     DashboardFilters,
-    current_season_label,
     get_competitions,
     get_date_bounds,
     get_default_date_range,
@@ -26,20 +25,19 @@ def _competition_options() -> tuple[list[str], dict[str, int | None]]:
     return labels, mapping
 
 
-def _season_options(competition_id: int | None) -> tuple[list[str], dict[str, int | None]]:
+def _season_options(competition_id: int | None) -> tuple[list[str], dict[str, str | None]]:
     seasons = get_seasons(competition_id)
-    labels: list[str] = []
-    mapping: dict[str, int | None] = {}
+    labels = ["Toutes"]
+    mapping: dict[str, str | None] = {"Toutes": None}
     for _, row in seasons.iterrows():
-        season_start = int(row["season_start"])
-        label = current_season_label(season_start)
+        label = str(row["season"])
         labels.append(label)
-        mapping[label] = season_start
+        mapping[label] = label
     return labels, mapping
 
 
-def _team_options(competition_id: int | None, season_start: int | None) -> tuple[list[str], dict[str, int | None]]:
-    teams = get_teams(competition_id, season_start)
+def _team_options(competition_id: int | None, season: str | None) -> tuple[list[str], dict[str, int | None]]:
+    teams = get_teams(competition_id, season)
     labels = ["Tous les clubs"]
     mapping: dict[str, int | None] = {"Tous les clubs": None}
     for _, row in teams.iterrows():
@@ -70,16 +68,16 @@ def render_global_filters(page_key: str) -> DashboardFilters:
     if st.session_state.get(season_key) not in season_labels and season_labels:
         st.session_state[season_key] = season_labels[0]
     selected_season = st.sidebar.selectbox("Saison", season_labels, key=season_key)
-    season_start = season_map.get(selected_season)
+    season = season_map.get(selected_season)
 
-    team_labels, team_map = _team_options(competition_id, season_start)
+    team_labels, team_map = _team_options(competition_id, season)
     team_key = f"{page_key}_team"
     if st.session_state.get(team_key) not in team_labels:
         st.session_state[team_key] = team_labels[0]
     selected_team = st.sidebar.selectbox("Equipe", team_labels, key=team_key)
     team_id = team_map.get(selected_team)
 
-    bounds = get_date_bounds(competition_id, season_start, team_id)
+    bounds = get_date_bounds(competition_id, season, team_id)
     default_start, default_end = get_default_date_range(bounds)
     default_date_value: tuple[dt_date, dt_date] | tuple[()] = ()
     if default_start and default_end:
@@ -102,7 +100,7 @@ def render_global_filters(page_key: str) -> DashboardFilters:
 
     filters = DashboardFilters(
         competition_id=competition_id,
-        season_start=season_start,
+        season=season,
         team_id=team_id,
         date_start=date_start,
         date_end=date_end,

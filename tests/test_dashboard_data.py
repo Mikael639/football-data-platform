@@ -103,11 +103,13 @@ def test_build_local_league_table_ranks_by_points_then_gd():
     assert int(leader["GD"]) == 1
 
 
-def test_build_match_where_clause_includes_all_filters():
+def test_build_match_where_clause_includes_all_filters(monkeypatch):
+    monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_season_column", lambda: True)
+
     clause, params = build_match_where_clause(
         DashboardFilters(
             competition_id=2014,
-            season_start=2025,
+            season="2025-2026",
             team_id=10,
             date_start="2025-08-01",
             date_end="2025-08-31",
@@ -116,7 +118,7 @@ def test_build_match_where_clause_includes_all_filters():
 
     assert "m.competition_id = :competition_id" in clause
     assert "team_id" in params
-    assert params["season_start"] == 2025
+    assert params["season"] == "2025-2026"
     assert params["date_start"] == "2025-08-01"
 
 

@@ -9,10 +9,10 @@ from typing import Any
 from sqlalchemy import text
 
 from src.config import Settings, get_settings
-from src.extract import count_extracted, extract_football_data_laliga_all_clubs, extract_from_mock
+from src.extract import count_extracted, extract_csv, extract_football_data_laliga_all_clubs, extract_from_mock
 from src.load import load_all
 from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
-from src.transform import count_loaded, transform, transform_football_data
+from src.transform import count_loaded, transform, transform_csv_to_tables, transform_football_data
 from src.utils.db import get_engine
 from src.utils.logger import get_logger
 
@@ -163,6 +163,9 @@ def _run_extract(settings: Settings) -> tuple[dict[str, Any], int]:
     if settings.data_mode == "mock":
         payload = extract_from_mock()
         return payload, count_extracted(payload)
+    if settings.data_mode == "csv":
+        payload = extract_csv(settings=settings)
+        return payload, count_extracted(payload)
 
     payload = extract_football_data_laliga_all_clubs(settings=settings)
     return payload, count_extracted(payload)
@@ -171,6 +174,8 @@ def _run_extract(settings: Settings) -> tuple[dict[str, Any], int]:
 def _run_transform(settings: Settings, payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     if settings.data_mode == "mock":
         return transform(payload)
+    if settings.data_mode == "csv":
+        return transform_csv_to_tables(payload)
     return transform_football_data(payload)
 
 

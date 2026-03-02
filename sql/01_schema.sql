@@ -56,6 +56,7 @@ CREATE TABLE fact_match (
     status TEXT,
     matchday INT,
     kickoff_utc TIMESTAMPTZ,
+    season TEXT,
     home_score INT,
     away_score INT
 );

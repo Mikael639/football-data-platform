@@ -65,7 +65,7 @@ class Settings:
     football_data_token: str | None = None
     football_data_base_url: str = "https://api.football-data.org/v4"
     competition_code: str = "PD"
-    data_mode: Literal["mock", "api"] = "api"
+    data_mode: Literal["mock", "api", "csv"] = "api"
     incremental: bool = False
     incremental_days: int = 14
     dq_freshness_days: int = 7
@@ -74,8 +74,8 @@ class Settings:
     fbref_study_backend: str = "local"
 
     def __post_init__(self) -> None:
-        if self.data_mode not in {"mock", "api"}:
-            raise SettingsError(f"DATA_MODE must be 'mock' or 'api', got {self.data_mode!r}")
+        if self.data_mode not in {"mock", "api", "csv"}:
+            raise SettingsError(f"DATA_MODE must be 'mock', 'api' or 'csv', got {self.data_mode!r}")
 
         required_parts = {
             "DB_HOST": self.db_host,
@@ -101,7 +101,7 @@ class Settings:
         if self.data_mode == "api" and not self.football_data_token:
             raise SettingsError(
                 "FOOTBALL_DATA_TOKEN is required when DATA_MODE is 'api'. "
-                "Set DATA_MODE=mock to use the bundled mock dataset."
+                "Set DATA_MODE=mock or DATA_MODE=csv to use local datasets."
             )
 
     @classmethod

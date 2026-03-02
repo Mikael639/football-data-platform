@@ -25,7 +25,7 @@ DEFAULT_CACHE_TTL = 300
 @dataclass(frozen=True)
 class DashboardFilters:
     competition_id: int | None
-    season_start: int | None
+    season: str | None
     team_id: int | None
     date_start: str | None
     date_end: str | None
@@ -55,6 +55,30 @@ def current_season_bounds(start_year: int) -> tuple[str, str]:
     return season_start.isoformat(), season_end.isoformat()
 
 
+def _season_start_from_label(season: str | None) -> int | None:
+    if season in {None, "", "Toutes"}:
+        return None
+    text_value = str(season).strip()
+    if "-" in text_value:
+        text_value = text_value.split("-", 1)[0]
+    try:
+        return int(text_value)
+    except ValueError:
+        return None
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def fact_match_has_season_column() -> bool:
+    query = """
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'fact_match'
+      AND column_name = 'season'
+    LIMIT 1
+    """
+    return not _read_sql(query).empty
+
+
 def build_match_where_clause(filters: DashboardFilters) -> tuple[str, dict[str, Any]]:
     clauses = ["1 = 1"]
     params: dict[str, Any] = {}
@@ -62,9 +86,9 @@ def build_match_where_clause(filters: DashboardFilters) -> tuple[str, dict[str, 
     if filters.competition_id is not None:
         clauses.append("m.competition_id = :competition_id")
         params["competition_id"] = int(filters.competition_id)
-    if filters.season_start is not None:
-        clauses.append(f"{SEASON_START_EXPR} = :season_start")
-        params["season_start"] = int(filters.season_start)
+    if filters.season is not None and fact_match_has_season_column():
+        clauses.append("m.season = :season")
+        params["season"] = str(filters.season)
     if filters.team_id is not None:
         clauses.append("(m.home_team_id = :team_id OR m.away_team_id = :team_id)")
         params["team_id"] = int(filters.team_id)
@@ -288,26 +312,26 @@ def get_competitions() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
 def get_seasons(competition_id: int | None = None) -> pd.DataFrame:
-    query = f"""
-    SELECT DISTINCT {SEASON_START_EXPR} AS season_start
-    FROM fact_match m
-    WHERE (:competition_id IS NULL OR m.competition_id = :competition_id)
-      AND {MATCH_DATE_EXPR} IS NOT NULL
-    ORDER BY season_start DESC
-    """
-    df = _read_sql(query, {"competition_id": competition_id})
-    if df.empty:
-        return pd.DataFrame([{"season_start": current_season_start_year_dash()}])
-    df["season_label"] = df["season_start"].map(current_season_label)
-    return df
+    if fact_match_has_season_column():
+        query = """
+        SELECT DISTINCT NULLIF(TRIM(m.season), '') AS season
+        FROM fact_match m
+        WHERE (:competition_id IS NULL OR m.competition_id = :competition_id)
+          AND NULLIF(TRIM(m.season), '') IS NOT NULL
+        ORDER BY season DESC
+        """
+        df = _read_sql(query, {"competition_id": competition_id})
+        if not df.empty:
+            return df
+    return pd.DataFrame(columns=["season"])
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
-def get_teams(competition_id: int | None = None, season_start: int | None = None) -> pd.DataFrame:
+def get_teams(competition_id: int | None = None, season: str | None = None) -> pd.DataFrame:
     where_clause, params = build_match_where_clause(
         DashboardFilters(
             competition_id=competition_id,
-            season_start=season_start,
+            season=season,
             team_id=None,
             date_start=None,
             date_end=None,
@@ -334,13 +358,13 @@ def get_teams(competition_id: int | None = None, season_start: int | None = None
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
 def get_date_bounds(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
     team_id: int | None = None,
 ) -> dict[str, Any]:
     where_clause, params = build_match_where_clause(
         DashboardFilters(
             competition_id=competition_id,
-            season_start=season_start,
+            season=season,
             team_id=team_id,
             date_start=None,
             date_end=None,
@@ -356,6 +380,7 @@ def get_date_bounds(
     """
     df = _read_sql(query, params)
     if df.empty or pd.isna(df.iloc[0]["min_date"]) or pd.isna(df.iloc[0]["max_date"]):
+        season_start = _season_start_from_label(season)
         if season_start is not None:
             season_start_date, season_end_date = current_season_bounds(season_start)
             return {
@@ -389,15 +414,20 @@ def get_default_date_range(bounds: dict[str, Any]) -> tuple[str | None, str | No
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
 def get_matches(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
     team_id: int | None = None,
     date_start: str | None = None,
     date_end: str | None = None,
 ) -> pd.DataFrame:
+    season_expr = (
+        f"COALESCE(NULLIF(TRIM(m.season), ''), CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1))"
+        if fact_match_has_season_column()
+        else f"CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1)"
+    )
     where_clause, params = build_match_where_clause(
         DashboardFilters(
             competition_id=competition_id,
-            season_start=season_start,
+            season=season,
             team_id=team_id,
             date_start=date_start,
             date_end=date_end,
@@ -408,7 +438,7 @@ def get_matches(
       m.match_id,
       m.competition_id,
       c.competition_name,
-      {SEASON_START_EXPR} AS season_start,
+      {season_expr} AS season,
       {MATCH_DATE_EXPR} AS match_date,
       m.date_id,
       m.kickoff_utc,
@@ -441,12 +471,12 @@ def get_matches(
 
 def get_kpis(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
     team_id: int | None = None,
     date_range: tuple[str | None, str | None] | None = None,
 ) -> dict[str, Any]:
     date_start, date_end = date_range or (None, None)
-    matches = get_matches(competition_id, season_start, team_id, date_start, date_end)
+    matches = get_matches(competition_id, season, team_id, date_start, date_end)
     perspective = build_perspective_table(matches, team_id=team_id)
     played = perspective.dropna(subset=["result"]).copy()
 
@@ -499,22 +529,23 @@ def split_recent_and_upcoming_matches(
 
 def get_recent_matches(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
     team_id: int | None = None,
     date_range: tuple[str | None, str | None] | None = None,
     recent_limit: int = 10,
     upcoming_limit: int = 5,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     date_start, date_end = date_range or (None, None)
-    matches = get_matches(competition_id, season_start, team_id, date_start, date_end)
+    matches = get_matches(competition_id, season, team_id, date_start, date_end)
     return split_recent_and_upcoming_matches(matches, recent_limit=recent_limit, upcoming_limit=upcoming_limit)
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
 def get_current_standings(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
 ) -> pd.DataFrame:
+    season_start = _season_start_from_label(season)
     query = """
     WITH latest AS (
       SELECT competition_id, season, MAX(matchday) AS matchday
@@ -554,9 +585,10 @@ def get_current_standings(
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
 def get_standings_curve(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
     team_id: int | None = None,
 ) -> pd.DataFrame:
+    season_start = _season_start_from_label(season)
     query = """
     SELECT
       s.competition_id,
@@ -608,14 +640,14 @@ def get_team_meta(team_id: int) -> dict[str, Any] | None:
 
 def get_home_away_split(
     competition_id: int | None = None,
-    season_start: int | None = None,
+    season: str | None = None,
     team_id: int | None = None,
     date_range: tuple[str | None, str | None] | None = None,
 ) -> pd.DataFrame:
     if team_id is None:
         return pd.DataFrame()
     date_start, date_end = date_range or (None, None)
-    matches = get_matches(competition_id, season_start, team_id, date_start, date_end)
+    matches = get_matches(competition_id, season, team_id, date_start, date_end)
     perspective = build_perspective_table(matches, team_id=team_id)
     played = perspective.dropna(subset=["result"]).copy()
     if played.empty:
@@ -662,7 +694,7 @@ def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
         matched = competitions[competitions["competition_name"].astype(str).str.contains(competition_code, case=False, na=False)]
         if not matched.empty and matched.iloc[0]["competition_id"] is not None:
             competition_id = int(matched.iloc[0]["competition_id"])
-    teams = get_teams(competition_id=competition_id, season_start=season_start_year)
+    teams = get_teams(competition_id=competition_id, season=current_season_label(season_start_year))
     if teams.empty:
         return None, "No teams available in local database"
     return teams[["team_id", "team_name"]].copy(), None
