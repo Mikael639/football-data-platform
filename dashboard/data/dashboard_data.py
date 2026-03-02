@@ -1,20 +1,16 @@
-import os
 from datetime import date, datetime
 
 import pandas as pd
 import requests
 import streamlit as st
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+
+from src.config import get_settings
+from src.utils.db import get_engine as build_engine
 
 
 def get_engine():
-    host = os.getenv("DB_HOST", "localhost")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "football_dw")
-    user = os.getenv("DB_USER", "football")
-    pwd = os.getenv("DB_PASSWORD", "football")
-    url = f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{name}"
-    return create_engine(url, pool_pre_ping=True)
+    return build_engine(settings=get_settings())
 
 
 def current_season_start_year_dash() -> int:
@@ -34,8 +30,9 @@ def current_season_bounds(start_year: int) -> tuple[str, str]:
 
 @st.cache_data(show_spinner=False, ttl=30 * 60)
 def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
-    token = os.getenv("FOOTBALL_DATA_TOKEN")
-    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
+    settings = get_settings()
+    token = settings.football_data_token
+    base_url = settings.football_data_base_url
     if not token:
         return None, "Missing FOOTBALL_DATA_TOKEN"
 
@@ -76,8 +73,9 @@ def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
 
 @st.cache_data(show_spinner=False, ttl=60 * 60)
 def fetch_live_team_squad(team_id: int):
-    token = os.getenv("FOOTBALL_DATA_TOKEN")
-    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
+    settings = get_settings()
+    token = settings.football_data_token
+    base_url = settings.football_data_base_url
     if not token:
         return None, "Missing FOOTBALL_DATA_TOKEN"
 

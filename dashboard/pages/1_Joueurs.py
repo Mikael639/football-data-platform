@@ -1,4 +1,3 @@
-import os
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -8,6 +7,9 @@ import requests
 import streamlit as st
 from sqlalchemy import create_engine, text
 
+from src.config import get_settings
+from src.utils.db import get_engine as build_engine
+
 st.set_page_config(page_title="Joueurs - Plateforme Data Football", layout="wide")
 
 PAGE_DIR = Path(__file__).resolve().parent
@@ -15,15 +17,8 @@ DASHBOARD_DIR = PAGE_DIR.parent
 DEFAULT_PLAYER_PLACEHOLDER = DASHBOARD_DIR / "assets" / "player-placeholder.svg"
 STUDY_FBREF_DIR = DASHBOARD_DIR.parent / "data" / "study" / "fbref"
 
-
 def get_engine():
-    host = os.getenv("DB_HOST", "localhost")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "football_dw")
-    user = os.getenv("DB_USER", "football")
-    pwd = os.getenv("DB_PASSWORD", "football")
-    url = f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{name}"
-    return create_engine(url, pool_pre_ping=True)
+    return build_engine(settings=get_settings())
 
 
 def current_season_start_year() -> int:
@@ -37,8 +32,9 @@ def current_season_label(start_year: int) -> str:
 
 @st.cache_data(show_spinner=False, ttl=30 * 60)
 def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
-    token = os.getenv("FOOTBALL_DATA_TOKEN")
-    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
+    settings = get_settings()
+    token = settings.football_data_token
+    base_url = settings.football_data_base_url
     if not token:
         return None, "FOOTBALL_DATA_TOKEN manquant"
     try:
@@ -65,8 +61,9 @@ def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
 
 @st.cache_data(show_spinner=False, ttl=60 * 60)
 def fetch_live_team_squad(team_id: int):
-    token = os.getenv("FOOTBALL_DATA_TOKEN")
-    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
+    settings = get_settings()
+    token = settings.football_data_token
+    base_url = settings.football_data_base_url
     if not token:
         return None, "FOOTBALL_DATA_TOKEN manquant"
     try:
@@ -109,8 +106,9 @@ def _normalize_name(value: str | None) -> str:
 
 @st.cache_data(show_spinner=False, ttl=60)
 def load_study_player_season_df():
-    supabase_db_url = os.getenv("SUPABASE_DB_URL") or os.getenv("STUDY_SUPABASE_DB_URL")
-    backend = (os.getenv("FBREF_STUDY_BACKEND") or "local").strip().lower()
+    settings = get_settings()
+    supabase_db_url = settings.supabase_db_url or settings.study_supabase_db_url
+    backend = settings.fbref_study_backend.strip().lower()
     if backend in {"supabase", "postgres"} and supabase_db_url:
         try:
             engine = create_engine(supabase_db_url, pool_pre_ping=True)
@@ -196,7 +194,7 @@ def build_player_palmares(player_name: str, study_season_df: pd.DataFrame) -> tu
 
 engine = get_engine()
 season_start_year = current_season_start_year()
-competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
+competition_code = get_settings().competition_code
 teams_df, teams_live_err = fetch_laliga_teams_live(competition_code, season_start_year)
 if teams_df is None or teams_df.empty:
     teams_df = pd.read_sql("SELECT team_id, team_name FROM dim_team ORDER BY team_name;", engine)

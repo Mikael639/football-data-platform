@@ -1,9 +1,10 @@
-import os
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 from sqlalchemy import text
+
+from src.config import get_settings
 
 from components.main_tabs import (
     render_clubs_tab,
@@ -187,10 +188,11 @@ def build_club_summary(
 
 
 def load_dashboard_state() -> dict[str, Any]:
+    settings = get_settings()
     engine = get_engine()
     season_start_year = current_season_start_year_dash()
     season_start, season_end = current_season_bounds(season_start_year)
-    competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
+    competition_code = settings.competition_code
 
     teams_df = load_teams(engine, competition_code, season_start_year, season_start, season_end)
     selected_team_name, selected_team_id = resolve_selected_team(teams_df)

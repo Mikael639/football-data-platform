@@ -1,4 +1,3 @@
-import os
 import unicodedata
 
 import altair as alt
@@ -7,6 +6,8 @@ import pandas as pd
 import requests
 import streamlit as st
 from sqlalchemy import create_engine, text
+
+from src.config import get_settings
 
 from data.dashboard_data import (
     build_local_league_table,
@@ -205,9 +206,10 @@ def _render_ligue_tab_legacy(
 
     st.header("Ligue - Classement et analyse (Saison en cours)")
 
-    token = os.getenv("FOOTBALL_DATA_TOKEN")
-    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
-    competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
+    settings = get_settings()
+    token = settings.football_data_token
+    base_url = settings.football_data_base_url
+    competition_code = settings.competition_code
 
     st.caption(f"Saison utilisee: {current_season_label(season_start_year)} (auto)")
 
@@ -464,8 +466,9 @@ def render_ligue_tab(
     st.header("Classements - Saison en cours")
     st.caption(f"Saison utilisee: {current_season_label(season_start_year)} (auto)")
 
-    token = os.getenv("FOOTBALL_DATA_TOKEN")
-    base_url = os.getenv("FOOTBALL_DATA_BASE_URL", "https://api.football-data.org/v4")
+    settings = get_settings()
+    token = settings.football_data_token
+    base_url = settings.football_data_base_url
 
     def _render_competition(
         *,
@@ -665,7 +668,8 @@ def render_player_details_tab() -> None:
     )
     st.page_link("pages/1_Joueurs.py", label="Ouvrir la page Joueurs detaillee")
 
-    supabase_db_url = os.getenv("SUPABASE_DB_URL") or os.getenv("STUDY_SUPABASE_DB_URL")
+    settings = get_settings()
+    supabase_db_url = settings.supabase_db_url or settings.study_supabase_db_url
     if not supabase_db_url:
         st.info("SUPABASE_DB_URL non configuree dans le conteneur dashboard.")
         return

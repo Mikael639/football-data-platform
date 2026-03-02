@@ -24,9 +24,12 @@ pre-commit install
 
 Important environment variables:
 
+- `DATA_MODE` is the new canonical runtime mode. `PIPELINE_MODE` is still supported as a legacy alias.
 - `PIPELINE_MODE=mock` runs the local mock payload.
 - `PIPELINE_MODE=api` uses `football-data.org`.
+- `INCREMENTAL=true` limits API match extraction to the rolling `INCREMENTAL_DAYS` window.
 - `DB_*` controls the local PostgreSQL connection for pipeline and dashboard.
+- `DATABASE_URL` can override the computed PostgreSQL URL when needed.
 - `SUPABASE_DB_URL` and `STUDY_SUPABASE_DB_URL` are optional and only used by the FBref study tooling.
 
 ## Run With Docker
@@ -43,11 +46,19 @@ Initialize the schema:
 make init
 ```
 
+Apply additive migrations on an existing database:
+
+```powershell
+make migrate
+```
+
 Run the pipeline container:
 
 ```powershell
 docker compose run --rm pipeline python -m src.run_pipeline
 ```
+
+The pipeline persists runtime timings and row volumes into `pipeline_run_log.metrics_jsonb` and `pipeline_run_log.volumes_jsonb`.
 
 Start the dashboard:
 

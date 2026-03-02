@@ -6,7 +6,9 @@ CREATE TABLE pipeline_run_log (
     status VARCHAR(20),
     extracted_count INT,
     loaded_count INT,
-    error_message TEXT
+    error_message TEXT,
+    metrics_jsonb JSONB,
+    volumes_jsonb JSONB
 );
 
 -- Team dimension
@@ -70,7 +72,8 @@ CREATE TABLE IF NOT EXISTS data_quality_check (
     check_id UUID PRIMARY KEY,
     run_id UUID NOT NULL REFERENCES pipeline_run_log(run_id),
     check_name VARCHAR(200) NOT NULL,
-    status VARCHAR(20) NOT NULL, -- PASS/FAIL
+    status VARCHAR(20) NOT NULL, -- PASS/WARN/FAIL
+    severity VARCHAR(20),
     metric_value FLOAT,
     threshold FLOAT,
     details TEXT,
