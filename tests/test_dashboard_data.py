@@ -15,6 +15,7 @@ from dashboard.data.dashboard_data import (
     build_perspective_table,
     build_team_match_view,
     compute_team_kpis,
+    get_current_standings,
 )
 
 
@@ -130,3 +131,41 @@ def test_build_perspective_table_creates_home_and_away_rows():
     assert len(perspective) == 4
     assert set(perspective["venue"]) == {"Home", "Away"}
     assert set(perspective["result"].dropna()) == {"W", "L", "D"}
+
+
+def test_dashboard_overview_uses_snapshot(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_read_sql(query, params=None):
+        captured["query"] = query
+        captured["params"] = params or {}
+        return pd.DataFrame(
+            [
+                {
+                    "competition_id": 2014,
+                    "season": 2020,
+                    "matchday": 5,
+                    "team_id": 10,
+                    "team_name": "FC Alpha",
+                    "short_name": "Alpha",
+                    "crest_url": None,
+                    "position": 1,
+                    "points": 13,
+                    "played_games": 5,
+                    "won": 4,
+                    "draw": 1,
+                    "lost": 0,
+                    "goals_for": 10,
+                    "goals_against": 3,
+                    "goal_difference": 7,
+                }
+            ]
+        )
+
+    monkeypatch.setattr("dashboard.data.dashboard_data._read_sql", fake_read_sql)
+
+    standings = get_current_standings(competition_id=2014, season="2020-2021")
+
+    assert "fact_standings_snapshot" in str(captured["query"])
+    assert captured["params"]["season_start"] == 2020
+    assert len(standings) == 1

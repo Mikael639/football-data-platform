@@ -14,6 +14,23 @@ def _executemany(engine: Engine, sql: str, rows: list[dict[str, Any]]) -> int:
     return len(rows)
 
 
+def _delete_standings_snapshot_scopes(engine: Engine, scopes: list[tuple[int, int]]) -> None:
+    if not scopes:
+        return
+    with engine.begin() as conn:
+        for competition_id, season in scopes:
+            conn.execute(
+                text(
+                    """
+                    DELETE FROM fact_standings_snapshot
+                    WHERE competition_id = :competition_id
+                      AND season = :season
+                    """
+                ),
+                {"competition_id": competition_id, "season": season},
+            )
+
+
 def _fetch_existing_team_ids(engine: Engine) -> dict[str, int]:
     with engine.begin() as conn:
         rows = conn.execute(text("SELECT team_id, team_name FROM dim_team")).mappings().all()
@@ -243,3 +260,60 @@ def load_all(engine: Engine, data: dict[str, Any]) -> int:
     )
 
     return loaded
+
+
+def load_standings_snapshot(
+    engine: Engine,
+    rows: list[dict[str, Any]],
+    scopes: list[tuple[int, int]] | None = None,
+) -> int:
+    _delete_standings_snapshot_scopes(engine, scopes or [])
+    return _executemany(
+        engine,
+        """
+        INSERT INTO fact_standings_snapshot (
+            competition_id,
+            season,
+            matchday,
+            team_id,
+            position,
+            points,
+            played_games,
+            won,
+            draw,
+            lost,
+            goals_for,
+            goals_against,
+            goal_difference,
+            snapshot_ts
+        )
+        VALUES (
+            :competition_id,
+            :season,
+            :matchday,
+            :team_id,
+            :position,
+            :points,
+            :played_games,
+            :won,
+            :draw,
+            :lost,
+            :goals_for,
+            :goals_against,
+            :goal_difference,
+            :snapshot_ts
+        )
+        ON CONFLICT (competition_id, season, matchday, team_id) DO UPDATE
+        SET position = EXCLUDED.position,
+            points = EXCLUDED.points,
+            played_games = EXCLUDED.played_games,
+            won = EXCLUDED.won,
+            draw = EXCLUDED.draw,
+            lost = EXCLUDED.lost,
+            goals_for = EXCLUDED.goals_for,
+            goals_against = EXCLUDED.goals_against,
+            goal_difference = EXCLUDED.goal_difference,
+            snapshot_ts = EXCLUDED.snapshot_ts
+    """,
+        rows,
+    )

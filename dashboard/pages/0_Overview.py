@@ -15,12 +15,13 @@ def _format_match_table(df: pd.DataFrame) -> pd.DataFrame:
     table = df.copy()
     kickoff = pd.to_datetime(table["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
     fallback = pd.to_datetime(table["match_date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    table["kickoff"] = kickoff.fillna(fallback).fillna("Date inconnue")
+    table["kickoff"] = kickoff.fillna(fallback).fillna("Unknown")
     table["score"] = table.apply(
         lambda row: "-" if pd.isna(row["home_score"]) or pd.isna(row["away_score"]) else f"{int(row['home_score'])}-{int(row['away_score'])}",
         axis=1,
     )
     table["status"] = table["status"].fillna("UNKNOWN")
+    table["matchday"] = table["matchday"].fillna("—")
     return table[["kickoff", "status", "matchday", "home_team", "score", "away_team"]]
 
 
@@ -46,7 +47,7 @@ def main() -> None:
     standings = get_current_standings(filters.competition_id, filters.season)
     st.subheader("Classement courant")
     if standings.empty:
-        st.info("Aucun snapshot de classement disponible pour ce filtre.")
+        st.info("Aucun snapshot de classement disponible. Lance le pipeline avec DATA_MODE=csv ou DATA_MODE=api.")
     else:
         standings_display = standings.rename(
             columns={
@@ -71,7 +72,7 @@ def main() -> None:
     st.subheader("Position au fil des journees")
     curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)
     if curve.empty:
-        st.info("Pas de donnees suffisantes pour tracer la courbe de classement.")
+        st.info("Pas de donnees de classement disponibles pour ce filtre.")
     else:
         render_position_curve(curve)
 

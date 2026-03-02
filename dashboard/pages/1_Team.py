@@ -38,13 +38,15 @@ def _format_team_calendar(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     kickoff = pd.to_datetime(out["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
     fallback = pd.to_datetime(out["date_dt"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["kickoff"] = kickoff.fillna(fallback).fillna("Date inconnue")
+    out["kickoff"] = kickoff.fillna(fallback).fillna("Unknown")
     out["score"] = out.apply(
         lambda row: "-" if pd.isna(row["goals_for"]) or pd.isna(row["goals_against"]) else f"{int(row['goals_for'])}-{int(row['goals_against'])}",
         axis=1,
     )
     out["result"] = out["result"].fillna("-")
-    return out[["kickoff", "venue", "opponent_name", "score", "result", "points"]]
+    out["status"] = out["status"].fillna("UNKNOWN")
+    out["matchday"] = out["matchday"].fillna("—")
+    return out[["kickoff", "matchday", "status", "venue", "opponent_name", "score", "result", "points"]]
 
 
 def main() -> None:
@@ -125,7 +127,7 @@ def main() -> None:
     st.subheader("Courbe de classement")
     curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)
     if curve.empty:
-        st.info("Pas de donnees de classement pour cette equipe.")
+        st.info("Pas de donnees de classement pour cette equipe. Lance le pipeline avec DATA_MODE=csv ou DATA_MODE=api.")
     else:
         render_position_curve(curve)
 

@@ -80,6 +80,7 @@ Only `La Liga` rows are loaded in this mode. Match rows are deduplicated from pl
 `(season, comp, date, squad, opponent, venue)`
 
 When the CSV does not contain a kickoff time, the pipeline stores `kickoff_utc` at `12:00:00Z` for that match date to keep the warehouse and dashboard usable.
+After `fact_match` is loaded, the pipeline computes `fact_standings_snapshot` from finished matches and matchdays so the dashboard can render classement and position curves without calling the API.
 
 Start the dashboard:
 

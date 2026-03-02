@@ -547,12 +547,24 @@ def get_current_standings(
 ) -> pd.DataFrame:
     season_start = _season_start_from_label(season)
     query = """
-    WITH latest AS (
-      SELECT competition_id, season, MAX(matchday) AS matchday
+    WITH scoped AS (
+      SELECT *
       FROM fact_standings_snapshot
       WHERE (:competition_id IS NULL OR competition_id = :competition_id)
         AND (:season_start IS NULL OR season = :season_start)
-      GROUP BY competition_id, season
+    ),
+    latest_season AS (
+      SELECT competition_id, MAX(season) AS season
+      FROM scoped
+      GROUP BY competition_id
+    ),
+    latest AS (
+      SELECT s.competition_id, s.season, MAX(s.matchday) AS matchday
+      FROM scoped s
+      JOIN latest_season ls
+        ON ls.competition_id = s.competition_id
+       AND ls.season = s.season
+      GROUP BY s.competition_id, s.season
     )
     SELECT
       s.competition_id,
@@ -571,7 +583,7 @@ def get_current_standings(
       s.goals_for,
       s.goals_against,
       s.goal_difference
-    FROM fact_standings_snapshot s
+    FROM scoped s
     JOIN latest l
       ON l.competition_id = s.competition_id
      AND l.season = s.season
@@ -590,6 +602,17 @@ def get_standings_curve(
 ) -> pd.DataFrame:
     season_start = _season_start_from_label(season)
     query = """
+    WITH scoped AS (
+      SELECT *
+      FROM fact_standings_snapshot
+      WHERE (:competition_id IS NULL OR competition_id = :competition_id)
+        AND (:season_start IS NULL OR season = :season_start)
+    ),
+    latest_season AS (
+      SELECT competition_id, MAX(season) AS season
+      FROM scoped
+      GROUP BY competition_id
+    )
     SELECT
       s.competition_id,
       s.season,
@@ -597,13 +620,22 @@ def get_standings_curve(
       s.team_id,
       t.team_name,
       t.short_name,
+      t.crest_url,
       s.position,
-      s.points
-    FROM fact_standings_snapshot s
+      s.points,
+      s.played_games,
+      s.won,
+      s.draw,
+      s.lost,
+      s.goals_for,
+      s.goals_against,
+      s.goal_difference
+    FROM scoped s
+    JOIN latest_season ls
+      ON ls.competition_id = s.competition_id
+     AND ls.season = s.season
     JOIN dim_team t ON t.team_id = s.team_id
-    WHERE (:competition_id IS NULL OR s.competition_id = :competition_id)
-      AND (:season_start IS NULL OR s.season = :season_start)
-      AND (:team_id IS NULL OR s.team_id = :team_id)
+    WHERE (:team_id IS NULL OR s.team_id = :team_id)
     ORDER BY s.matchday, s.position, t.team_name
     """
     df = _read_sql(query, {"competition_id": competition_id, "season_start": season_start, "team_id": team_id})

@@ -249,6 +249,23 @@ def _run_player_stats_volume_check(engine: Engine, allow_empty_player_stats: boo
     )
 
 
+def _run_standings_snapshot_volume_check(engine: Engine, context: QualityContext) -> QualityCheckResult:
+    snapshot_count = _scalar(engine, "SELECT COUNT(*) FROM fact_standings_snapshot")
+    status = "PASS" if snapshot_count > 0 else "WARN"
+    details = (
+        f"rows={snapshot_count}"
+        if snapshot_count > 0
+        else "fact_standings_snapshot is empty; run pipeline with DATA_MODE=csv or api to populate standings"
+    )
+    return _result(
+        name="volume_standings_snapshot_nonzero",
+        status=status,
+        metric_value=float(snapshot_count),
+        threshold=1.0,
+        details=details,
+    )
+
+
 def _run_freshness_check(engine: Engine, context: QualityContext) -> QualityCheckResult:
     max_date = _scalar_date(engine, "SELECT MAX(date_id) FROM dim_date")
     if max_date is None:
@@ -332,6 +349,7 @@ def _build_checks(
         _run_team_dimension_check(engine, context),
         _run_match_volume_check(engine, context),
         _run_player_stats_volume_check(engine, allow_empty_player_stats),
+        _run_standings_snapshot_volume_check(engine, context),
         _run_freshness_check(engine, context),
         _run_finished_score_consistency_check(context),
     ]

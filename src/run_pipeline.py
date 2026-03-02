@@ -10,8 +10,9 @@ from sqlalchemy import text
 
 from src.config import Settings, get_settings
 from src.extract import count_extracted, extract_csv, extract_football_data_laliga_all_clubs, extract_from_mock
-from src.load import load_all
+from src.load import load_all, load_standings_snapshot
 from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
+from src.standings import compute_standings_snapshot
 from src.transform import count_loaded, transform, transform_csv_to_tables, transform_football_data
 from src.utils.db import get_engine
 from src.utils.logger import get_logger
@@ -31,7 +32,13 @@ def _truncate_error(message: str | None, limit: int = 1000) -> str | None:
     return f"{message[: limit - 3]}..."
 
 
-def build_volume_metrics(transformed: dict[str, list[dict[str, Any]]], *, extracted: int, loaded: int) -> dict[str, int]:
+def build_volume_metrics(
+    transformed: dict[str, list[dict[str, Any]]],
+    *,
+    extracted: int,
+    loaded: int,
+    computed_standings_rows: int | None = None,
+) -> dict[str, int]:
     return {
         "extracted_count": extracted,
         "loaded_count": loaded,
@@ -41,7 +48,11 @@ def build_volume_metrics(transformed: dict[str, list[dict[str, Any]]], *, extrac
         "rows_dim_player": len(transformed.get("dim_player", [])),
         "rows_fact_match": len(transformed.get("fact_match", [])),
         "rows_fact_player_match_stats": len(transformed.get("fact_player_match_stats", [])),
-        "rows_fact_standings_snapshot": len(transformed.get("fact_standings_snapshot", [])),
+        "rows_fact_standings_snapshot": (
+            computed_standings_rows
+            if computed_standings_rows is not None
+            else len(transformed.get("fact_standings_snapshot", []))
+        ),
     }
 
 
@@ -78,6 +89,7 @@ def build_pipeline_run_payload(
     transformed: dict[str, list[dict[str, Any]]] | None,
     payload: dict[str, Any] | None,
     dq_results: list[QualityCheckResult] | None,
+    computed_standings_rows: int | None = None,
     error_message: str | None = None,
 ) -> dict[str, Any]:
     transformed_rows = transformed or {}
@@ -94,6 +106,7 @@ def build_pipeline_run_payload(
                 transformed_rows,
                 extracted=extracted,
                 loaded=loaded,
+                computed_standings_rows=computed_standings_rows,
             )
         ),
     }
@@ -186,6 +199,20 @@ def _log_incremental_mode(settings: Settings, payload: dict[str, Any] | None) ->
         logger.info("Incremental mode OFF. Full current-season extraction enabled.")
 
 
+def _standings_scopes_from_transformed(transformed: dict[str, list[dict[str, Any]]] | None) -> list[tuple[int, str | None]]:
+    if not transformed:
+        return []
+    scopes = {
+        (
+            int(row["competition_id"]),
+            str(row["season"]).strip() if row.get("season") not in {None, ""} else None,
+        )
+        for row in transformed.get("fact_match", [])
+        if row.get("competition_id") is not None
+    }
+    return sorted(scopes)
+
+
 def main() -> None:
     settings = get_settings()
     settings.validate_for_pipeline()
@@ -199,6 +226,7 @@ def main() -> None:
     payload: dict[str, Any] | None = None
     transformed: dict[str, list[dict[str, Any]]] | None = None
     dq_results: list[QualityCheckResult] | None = None
+    computed_standings_rows: int | None = None
     timings_ms = {
         "extract_ms": 0,
         "transform_ms": 0,
@@ -217,6 +245,7 @@ def main() -> None:
         transformed={},
         payload=None,
         dq_results=[],
+        computed_standings_rows=None,
         error_message=None,
     )
 
@@ -238,6 +267,23 @@ def main() -> None:
 
         load_started = time.perf_counter()
         loaded = load_all(engine, transformed)
+        should_compute_standings = settings.data_mode == "csv" or not transformed.get("fact_standings_snapshot")
+        if should_compute_standings:
+            standings_result = compute_standings_snapshot(engine, scopes=_standings_scopes_from_transformed(transformed))
+            computed_standings_rows = load_standings_snapshot(
+                engine,
+                standings_result.rows,
+                scopes=standings_result.scopes,
+            )
+            loaded += computed_standings_rows
+            logger.info(
+                "Computed standings snapshot rows=%s scopes=%s ignored_null_matchday=%s",
+                computed_standings_rows,
+                len(standings_result.scopes),
+                standings_result.ignored_null_matchday_count,
+            )
+        else:
+            computed_standings_rows = len(transformed.get("fact_standings_snapshot", []))
         timings_ms["load_ms"] = _elapsed_ms(load_started)
         logger.info("Loaded rows: %s", loaded)
 
@@ -267,6 +313,7 @@ def main() -> None:
             transformed=transformed,
             payload=payload,
             dq_results=dq_results,
+            computed_standings_rows=computed_standings_rows,
             error_message=None,
         )
         _update_pipeline_run(run_id, end_payload, engine)
@@ -285,6 +332,7 @@ def main() -> None:
             transformed=transformed,
             payload=payload,
             dq_results=dq_results,
+            computed_standings_rows=computed_standings_rows,
             error_message=str(exc),
         )
         updated = _update_pipeline_run(run_id, failed_payload, engine)
