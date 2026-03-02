@@ -2,14 +2,31 @@
   "team": "Real Madrid",
   "season": 2024,
   "competition": "LaLiga",
+  "country": "Spain",
+  "extracted_at_utc": "2024-09-16T08:30:00Z",
   "fixtures": [
     {
       "match_id": 1001,
       "date": "2024-09-01",
       "competition_id": 1,
       "competition_name": "LaLiga",
-      "home_team": {"team_id": 541, "team_name": "Real Madrid", "country": "Spain"},
-      "away_team": {"team_id": 529, "team_name": "Barcelona", "country": "Spain"},
+      "status": "FINISHED",
+      "matchday": 4,
+      "kickoff_utc": "2024-09-01T19:00:00Z",
+      "home_team": {
+        "team_id": 541,
+        "team_name": "Real Madrid",
+        "short_name": "Real Madrid",
+        "country": "Spain",
+        "crest_url": "https://crests.example/real-madrid.png"
+      },
+      "away_team": {
+        "team_id": 529,
+        "team_name": "Barcelona",
+        "short_name": "Barcelona",
+        "country": "Spain",
+        "crest_url": "https://crests.example/barcelona.png"
+      },
       "score": {"home": 2, "away": 1},
       "player_stats": [
         {
@@ -43,8 +60,23 @@
       "date": "2024-09-15",
       "competition_id": 1,
       "competition_name": "LaLiga",
-      "home_team": {"team_id": 530, "team_name": "Atletico Madrid", "country": "Spain"},
-      "away_team": {"team_id": 541, "team_name": "Real Madrid", "country": "Spain"},
+      "status": "SCHEDULED",
+      "matchday": 5,
+      "kickoff_utc": "2024-09-15T20:00:00Z",
+      "home_team": {
+        "team_id": 530,
+        "team_name": "Atletico Madrid",
+        "short_name": "Atletico",
+        "country": "Spain",
+        "crest_url": "https://crests.example/atletico.png"
+      },
+      "away_team": {
+        "team_id": 541,
+        "team_name": "Real Madrid",
+        "short_name": "Real Madrid",
+        "country": "Spain",
+        "crest_url": "https://crests.example/real-madrid.png"
+      },
       "score": {"home": 0, "away": 0},
       "player_stats": [
         {
@@ -61,5 +93,35 @@
         }
       ]
     }
-  ]
+  ],
+  "standings": {
+    "season": 2024,
+    "matchday": 5,
+    "table": [
+      {
+        "team_id": 541,
+        "position": 1,
+        "points": 12,
+        "played_games": 5,
+        "won": 4,
+        "draw": 0,
+        "lost": 1,
+        "goals_for": 10,
+        "goals_against": 4,
+        "goal_difference": 6
+      },
+      {
+        "team_id": 529,
+        "position": 2,
+        "points": 10,
+        "played_games": 5,
+        "won": 3,
+        "draw": 1,
+        "lost": 1,
+        "goals_for": 9,
+        "goals_against": 5,
+        "goal_difference": 4
+      }
+    ]
+  }
 }

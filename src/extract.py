@@ -104,6 +104,20 @@ def _build_match_query_params(settings: Settings, season: int, today: date | Non
     return params
 
 
+def _fetch_standings_payload(
+    competition_code: str,
+    season: int,
+    token: str,
+    base_url: str,
+) -> dict[str, Any]:
+    return _fd_get(
+        f"/competitions/{competition_code}/standings",
+        token,
+        base_url,
+        params={"season": season},
+    )
+
+
 # -----------------------
 # football-data extract (all LaLiga clubs, current season)
 # -----------------------
@@ -167,15 +181,19 @@ def extract_football_data_laliga_all_clubs(
         params=match_params,
     )
     matches = matches_payload.get("matches", [])
+    standings_payload = _fetch_standings_payload(competition_code, season, token, base_url)
 
     return {
         "source": "football-data.org",
+        "extracted_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "season": season,
         "competition_code": competition_code,
         "competition": teams_payload.get("competition", {}),
         "teams": teams,
         "squads_by_team": squads_by_team,
         "matches": matches,
+        "standings": standings_payload,
+        "standings_matchday": (standings_payload.get("season") or {}).get("currentMatchday"),
         "squad_fetch_errors": squad_fetch_errors,
         "incremental_window": calculate_incremental_window(resolved_settings.incremental_days, today=today)
         if resolved_settings.incremental

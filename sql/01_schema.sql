@@ -15,7 +15,9 @@ CREATE TABLE pipeline_run_log (
 CREATE TABLE dim_team (
     team_id INT PRIMARY KEY,
     team_name VARCHAR(100),
-    country VARCHAR(100)
+    country VARCHAR(100),
+    crest_url TEXT,
+    short_name TEXT
 );
 
 -- Player dimension
@@ -51,8 +53,29 @@ CREATE TABLE fact_match (
     competition_id INT REFERENCES dim_competition(competition_id),
     home_team_id INT REFERENCES dim_team(team_id),
     away_team_id INT REFERENCES dim_team(team_id),
+    status TEXT,
+    matchday INT,
+    kickoff_utc TIMESTAMPTZ,
     home_score INT,
     away_score INT
+);
+
+CREATE TABLE fact_standings_snapshot (
+    competition_id INT NOT NULL REFERENCES dim_competition(competition_id),
+    season INT NOT NULL,
+    matchday INT,
+    team_id INT NOT NULL REFERENCES dim_team(team_id),
+    position INT,
+    points INT,
+    played_games INT,
+    won INT,
+    draw INT,
+    lost INT,
+    goals_for INT,
+    goals_against INT,
+    goal_difference INT,
+    snapshot_ts TIMESTAMPTZ,
+    PRIMARY KEY (competition_id, season, matchday, team_id)
 );
 
 -- Player stats fact table (player-match grain)

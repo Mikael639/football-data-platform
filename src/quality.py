@@ -278,7 +278,8 @@ def _run_freshness_check(engine: Engine, context: QualityContext) -> QualityChec
 
 
 def _run_finished_score_consistency_check(context: QualityContext) -> QualityCheckResult:
-    matches = (context.payload or {}).get("matches", [])
+    payload = context.payload or {}
+    matches = payload.get("matches") or payload.get("fixtures") or []
     if not matches:
         status = "WARN" if context.data_mode == "mock" else "PASS"
         return _result(
@@ -293,7 +294,8 @@ def _run_finished_score_consistency_check(context: QualityContext) -> QualityChe
         if match.get("status") != "FINISHED":
             continue
         finished_count += 1
-        score = (match.get("score") or {}).get("fullTime") or {}
+        score_payload = match.get("score") or {}
+        score = score_payload.get("fullTime") if isinstance(score_payload.get("fullTime"), dict) else score_payload
         home_score = score.get("home")
         away_score = score.get("away")
         if home_score is None or away_score is None:

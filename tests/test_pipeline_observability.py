@@ -15,6 +15,7 @@ def test_pipeline_log_payload_contains_metrics_and_volumes():
         "dim_player": [{"player_id": 10}],
         "fact_match": [{"match_id": 100}],
         "fact_player_match_stats": [{"match_id": 100, "player_id": 10}],
+        "fact_standings_snapshot": [{"competition_id": 1, "season": 2024, "matchday": 5, "team_id": 1}],
     }
     dq_results = [
         QualityCheckResult(
@@ -48,4 +49,5 @@ def test_pipeline_log_payload_contains_metrics_and_volumes():
     assert metrics["dq_summary"] == {"PASS": 0, "WARN": 1, "FAIL": 0}
     assert volumes["rows_fact_match"] == 1
     assert volumes["rows_fact_player_match_stats"] == 1
+    assert volumes["rows_fact_standings_snapshot"] == 1
     assert volumes["loaded_count"] == 6

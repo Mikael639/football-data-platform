@@ -41,6 +41,7 @@ def build_volume_metrics(transformed: dict[str, list[dict[str, Any]]], *, extrac
         "rows_dim_player": len(transformed.get("dim_player", [])),
         "rows_fact_match": len(transformed.get("fact_match", [])),
         "rows_fact_player_match_stats": len(transformed.get("fact_player_match_stats", [])),
+        "rows_fact_standings_snapshot": len(transformed.get("fact_standings_snapshot", [])),
     }
 
 
