@@ -3,14 +3,16 @@ import types
 
 import pandas as pd
 
-# Minimal stub so we can import dashboard data helpers without installing Streamlit in local test env.
 if "streamlit" not in sys.modules:
     streamlit_stub = types.ModuleType("streamlit")
     streamlit_stub.cache_data = lambda **kwargs: (lambda fn: fn)
     sys.modules["streamlit"] = streamlit_stub
 
 from dashboard.data.dashboard_data import (
+    DashboardFilters,
     build_local_league_table,
+    build_match_where_clause,
+    build_perspective_table,
     build_team_match_view,
     compute_team_kpis,
 )
@@ -22,6 +24,10 @@ def _sample_matches() -> pd.DataFrame:
             {
                 "match_id": 1,
                 "date_id": "2025-08-10",
+                "date_dt": pd.Timestamp("2025-08-10"),
+                "kickoff_utc": pd.Timestamp("2025-08-10T19:00:00Z"),
+                "status": "FINISHED",
+                "matchday": 1,
                 "home_team_id": 10,
                 "home_team": "FC Alpha",
                 "away_team_id": 20,
@@ -32,6 +38,10 @@ def _sample_matches() -> pd.DataFrame:
             {
                 "match_id": 2,
                 "date_id": "2025-08-17",
+                "date_dt": pd.Timestamp("2025-08-17"),
+                "kickoff_utc": pd.Timestamp("2025-08-17T19:00:00Z"),
+                "status": "FINISHED",
+                "matchday": 2,
                 "home_team_id": 20,
                 "home_team": "FC Beta",
                 "away_team_id": 10,
@@ -42,6 +52,10 @@ def _sample_matches() -> pd.DataFrame:
             {
                 "match_id": 3,
                 "date_id": "2025-08-24",
+                "date_dt": pd.Timestamp("2025-08-24"),
+                "kickoff_utc": pd.Timestamp("2025-08-24T19:00:00Z"),
+                "status": "SCHEDULED",
+                "matchday": 3,
                 "home_team_id": 10,
                 "home_team": "FC Alpha",
                 "away_team_id": 30,
@@ -51,7 +65,6 @@ def _sample_matches() -> pd.DataFrame:
             },
         ]
     )
-    df["date_dt"] = pd.to_datetime(df["date_id"], errors="coerce")
     return df
 
 
@@ -88,3 +101,30 @@ def test_build_local_league_table_ranks_by_points_then_gd():
     assert int(leader["Pts"]) == 4
     assert int(leader["P"]) == 2
     assert int(leader["GD"]) == 1
+
+
+def test_build_match_where_clause_includes_all_filters():
+    clause, params = build_match_where_clause(
+        DashboardFilters(
+            competition_id=2014,
+            season_start=2025,
+            team_id=10,
+            date_start="2025-08-01",
+            date_end="2025-08-31",
+        )
+    )
+
+    assert "m.competition_id = :competition_id" in clause
+    assert "team_id" in params
+    assert params["season_start"] == 2025
+    assert params["date_start"] == "2025-08-01"
+
+
+def test_build_perspective_table_creates_home_and_away_rows():
+    df = _sample_matches().head(2)
+
+    perspective = build_perspective_table(df, team_id=None)
+
+    assert len(perspective) == 4
+    assert set(perspective["venue"]) == {"Home", "Away"}
+    assert set(perspective["result"].dropna()) == {"W", "L", "D"}

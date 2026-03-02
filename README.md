@@ -30,6 +30,7 @@ Important environment variables:
 - `INCREMENTAL=true` limits API match extraction to the rolling `INCREMENTAL_DAYS` window.
 - `DB_*` controls the local PostgreSQL connection for pipeline and dashboard.
 - `DATABASE_URL` can override the computed PostgreSQL URL when needed.
+- `ENRICH_LIVE=false` keeps the dashboard in DB-first mode with no mandatory external calls.
 - `SUPABASE_DB_URL` and `STUDY_SUPABASE_DB_URL` are optional and only used by the FBref study tooling.
 
 ## Run With Docker
@@ -67,6 +68,12 @@ docker compose up -d dashboard
 ```
 
 The dashboard is exposed on `http://localhost:9001` by default.
+Pages:
+
+- `Overview`: KPI globaux, classement courant, courbe de position, calendrier recent/prochain.
+- `Team`: header equipe, forme 5/10 matchs, split domicile/exterieur, calendrier et courbe de classement.
+- `Monitoring`: runs pipeline, durees/volumes, checks DQ par `run_id`.
+- `Joueurs`: effectif en base pour le club filtre.
 
 ## Run Locally
 

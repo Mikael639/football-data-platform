@@ -9,7 +9,7 @@ repos:
           - --select=E,F,I
           - --ignore=E402
         files: >-
-          ^(src/(config|extract|quality|run_pipeline|transform)\.py|src/utils/db\.py|dashboard/(app\.py|data/dashboard_data\.py|components/main_tabs\.py|pages/1_Joueurs\.py)|tests/test_(transform|env_config|settings|pipeline_observability)\.py)$
+          ^(src/(config|extract|quality|run_pipeline|transform)\.py|src/utils/db\.py|dashboard/(app\.py|data/dashboard_data\.py|components/main_tabs\.py|state/filters\.py|ui/(charts|display)\.py|pages/(0_Overview|1_Team|2_Monitoring|3_Joueurs)\.py)|tests/test_(transform|env_config|settings|pipeline_observability|dashboard_data)\.py)$
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
@@ -19,7 +19,7 @@ repos:
           - --profile=black
           - --filter-files
         files: >-
-          ^(src/(config|extract|quality|run_pipeline|transform)\.py|src/utils/db\.py|dashboard/(app\.py|data/dashboard_data\.py|components/main_tabs\.py|pages/1_Joueurs\.py)|tests/test_(transform|env_config|settings|pipeline_observability)\.py)$
+          ^(src/(config|extract|quality|run_pipeline|transform)\.py|src/utils/db\.py|dashboard/(app\.py|data/dashboard_data\.py|components/main_tabs\.py|state/filters\.py|ui/(charts|display)\.py|pages/(0_Overview|1_Team|2_Monitoring|3_Joueurs)\.py)|tests/test_(transform|env_config|settings|pipeline_observability|dashboard_data)\.py)$
 
   - repo: https://github.com/psf/black
     rev: 24.8.0
@@ -28,4 +28,4 @@ repos:
         args:
           - --line-length=120
         files: >-
-          ^(src/(config|extract|quality|run_pipeline|transform)\.py|src/utils/db\.py|dashboard/(app\.py|data/dashboard_data\.py|components/main_tabs\.py|pages/1_Joueurs\.py)|tests/test_(transform|env_config|settings|pipeline_observability)\.py)$
+          ^(src/(config|extract|quality|run_pipeline|transform)\.py|src/utils/db\.py|dashboard/(app\.py|data/dashboard_data\.py|components/main_tabs\.py|state/filters\.py|ui/(charts|display)\.py|pages/(0_Overview|1_Team|2_Monitoring|3_Joueurs)\.py)|tests/test_(transform|env_config|settings|pipeline_observability|dashboard_data)\.py)$
