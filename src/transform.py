@@ -1,9 +1,15 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Set
+
 from datetime import datetime
+from typing import Any
+
+Record = dict[str, Any]
+Payload = dict[str, Any]
+TableRows = list[Record]
+TransformedData = dict[str, TableRows]
 
 
-def _safe_int(value, default=0):
+def _safe_int(value: Any, default: int = 0) -> int:
     try:
         if value is None:
             return default
@@ -12,131 +18,150 @@ def _safe_int(value, default=0):
         return default
 
 
-def _safe_float_ratio(value):
+def _safe_float_ratio(value: Any) -> float:
     try:
         if value is None:
             return 0.0
-        v = float(value)
-        # Clamp entre 0 et 1
-        return max(0.0, min(v, 1.0))
+        parsed = float(value)
+        return max(0.0, min(parsed, 1.0))
     except Exception:
         return 0.0
 
 
-def transform(payload: Dict[str, Any]) -> Dict[str, Any]:
-    fixtures = payload.get("fixtures", [])
-
-    dates: Set[str] = set()
-    teams: Dict[int, Dict[str, Any]] = {}
-    competitions: Dict[int, Dict[str, Any]] = {}
-    players: Dict[int, Dict[str, Any]] = {}
-
-    matches: List[Dict[str, Any]] = []
-    player_match_stats: List[Dict[str, Any]] = []
-
-    # Optional squad-level players (used by football-data.org extraction)
-    for p in payload.get("squad_players", []):
-        pid = _safe_int(p.get("player_id"))
-        if pid == 0:
-            continue
-        players[pid] = {
-            "player_id": pid,
-            "full_name": p.get("full_name"),
-            "position": p.get("position"),
-            "nationality": p.get("nationality"),
-            "birth_date": p.get("birth_date"),
-            "photo_url": p.get("photo_url"),
-            "team_id": _safe_int(p.get("team_id")),
-        }
-
-    for fx in fixtures:
-        match_id = _safe_int(fx.get("match_id"))
-        date_str = fx.get("date")
-        if date_str:
-            dates.add(date_str)
-
-        # Competition
-        comp_id = _safe_int(fx.get("competition_id"))
-        competitions[comp_id] = {
-            "competition_id": comp_id,
-            "competition_name": fx.get("competition_name"),
-            "country": None,
-        }
-
-        # Teams
-        home = fx.get("home_team", {})
-        away = fx.get("away_team", {})
-
-        for t in (home, away):
-            tid = _safe_int(t.get("team_id"))
-            teams[tid] = {
-                "team_id": tid,
-                "team_name": t.get("team_name"),
-                "country": t.get("country"),
-            }
-
-        score = fx.get("score", {})
-        matches.append(
-            {
-                "match_id": match_id,
-                "date_id": date_str,
-                "competition_id": comp_id,
-                "home_team_id": _safe_int(home.get("team_id")),
-                "away_team_id": _safe_int(away.get("team_id")),
-                "home_score": _safe_int(score.get("home")),
-                "away_score": _safe_int(score.get("away")),
-            }
-        )
-
-        # Player stats
-        for ps in fx.get("player_stats", []):
-            p = ps.get("player", {})
-            pid = _safe_int(p.get("player_id"))
-
-            players[pid] = {
-                "player_id": pid,
-                "full_name": p.get("full_name"),
-                "position": p.get("position"),
-                "nationality": p.get("nationality"),
-                "birth_date": p.get("birth_date"),
-                "photo_url": p.get("photo_url",None),
-                "team_id": _safe_int(p.get("team_id")),
-            }
-
-            s = ps.get("stats", {})
-
-            minutes = _safe_int(s.get("minutes"))
-            if minutes > 130:
-                raise ValueError(f"Invalid minutes value detected: {minutes}")
-
-            player_match_stats.append(
-                {
-                    "match_id": match_id,
-                    "player_id": pid,
-                    "minutes": minutes,
-                    "goals": _safe_int(s.get("goals")),
-                    "assists": _safe_int(s.get("assists")),
-                    "shots": _safe_int(s.get("shots")),
-                    "passes": _safe_int(s.get("passes")),
-                    "pass_accuracy": _safe_float_ratio(s.get("pass_accuracy")),
-                }
-            )
-
-    # dim_date
-    dim_dates = []
-    for d in sorted(dates):
-        dt = datetime.strptime(d, "%Y-%m-%d")
+def _build_dim_date(date_values: set[str]) -> TableRows:
+    dim_dates: TableRows = []
+    for date_value in sorted(date_values):
+        parsed = datetime.strptime(date_value, "%Y-%m-%d")
         dim_dates.append(
             {
-                "date_id": d,
-                "year": dt.year,
-                "month": dt.month,
-                "day": dt.day,
+                "date_id": date_value,
+                "year": parsed.year,
+                "month": parsed.month,
+                "day": parsed.day,
+            }
+        )
+    return dim_dates
+
+
+def _extract_mock_squad_players(payload: Payload, players: dict[int, Record]) -> None:
+    for player in payload.get("squad_players", []):
+        player_id = _safe_int(player.get("player_id"))
+        if player_id == 0:
+            continue
+
+        players[player_id] = {
+            "player_id": player_id,
+            "full_name": player.get("full_name"),
+            "position": player.get("position"),
+            "nationality": player.get("nationality"),
+            "birth_date": player.get("birth_date"),
+            "photo_url": player.get("photo_url"),
+            "team_id": _safe_int(player.get("team_id")),
+        }
+
+
+def _build_mock_competition_row(fixture: Record) -> Record:
+    competition_id = _safe_int(fixture.get("competition_id"))
+    return {
+        "competition_id": competition_id,
+        "competition_name": fixture.get("competition_name"),
+        "country": None,
+    }
+
+
+def _update_mock_teams(home_team: Record, away_team: Record, teams: dict[int, Record]) -> None:
+    for team in (home_team, away_team):
+        team_id = _safe_int(team.get("team_id"))
+        teams[team_id] = {
+            "team_id": team_id,
+            "team_name": team.get("team_name"),
+            "country": team.get("country"),
+        }
+
+
+def _build_mock_match_row(fixture: Record, home_team: Record, away_team: Record) -> Record:
+    score = fixture.get("score", {})
+    return {
+        "match_id": _safe_int(fixture.get("match_id")),
+        "date_id": fixture.get("date"),
+        "competition_id": _safe_int(fixture.get("competition_id")),
+        "home_team_id": _safe_int(home_team.get("team_id")),
+        "away_team_id": _safe_int(away_team.get("team_id")),
+        "home_score": _safe_int(score.get("home")),
+        "away_score": _safe_int(score.get("away")),
+    }
+
+
+def _build_mock_player_stats(
+    fixture: Record,
+    players: dict[int, Record],
+) -> TableRows:
+    player_match_stats: TableRows = []
+
+    for player_stats in fixture.get("player_stats", []):
+        player = player_stats.get("player", {})
+        player_id = _safe_int(player.get("player_id"))
+
+        players[player_id] = {
+            "player_id": player_id,
+            "full_name": player.get("full_name"),
+            "position": player.get("position"),
+            "nationality": player.get("nationality"),
+            "birth_date": player.get("birth_date"),
+            "photo_url": player.get("photo_url", None),
+            "team_id": _safe_int(player.get("team_id")),
+        }
+
+        stats = player_stats.get("stats", {})
+        minutes = _safe_int(stats.get("minutes"))
+        if minutes > 130:
+            raise ValueError(f"Invalid minutes value detected: {minutes}")
+
+        player_match_stats.append(
+            {
+                "match_id": _safe_int(fixture.get("match_id")),
+                "player_id": player_id,
+                "minutes": minutes,
+                "goals": _safe_int(stats.get("goals")),
+                "assists": _safe_int(stats.get("assists")),
+                "shots": _safe_int(stats.get("shots")),
+                "passes": _safe_int(stats.get("passes")),
+                "pass_accuracy": _safe_float_ratio(stats.get("pass_accuracy")),
             }
         )
 
+    return player_match_stats
+
+
+def transform(payload: Payload) -> TransformedData:
+    fixtures = payload.get("fixtures", [])
+
+    date_values: set[str] = set()
+    teams: dict[int, Record] = {}
+    competitions: dict[int, Record] = {}
+    players: dict[int, Record] = {}
+    matches: TableRows = []
+    player_match_stats: TableRows = []
+
+    _extract_mock_squad_players(payload, players)
+
+    for fixture in fixtures:
+        date_value = fixture.get("date")
+        if date_value:
+            date_values.add(date_value)
+
+        competition = _build_mock_competition_row(fixture)
+        competitions[competition["competition_id"]] = competition
+
+        home_team = fixture.get("home_team", {})
+        away_team = fixture.get("away_team", {})
+        _update_mock_teams(home_team, away_team, teams)
+
+        matches.append(_build_mock_match_row(fixture, home_team, away_team))
+        player_match_stats.extend(_build_mock_player_stats(fixture, players))
+
     return {
-        "dim_date": dim_dates,
+        "dim_date": _build_dim_date(date_values),
         "dim_team": list(teams.values()),
         "dim_competition": list(competitions.values()),
         "dim_player": list(players.values()),
@@ -144,49 +169,46 @@ def transform(payload: Dict[str, Any]) -> Dict[str, Any]:
         "fact_player_match_stats": player_match_stats,
     }
 
-def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
-    matches = payload.get("matches", [])
-    squad = payload.get("squad", [])
-    squads_by_team = payload.get("squads_by_team", [])
-    competition_meta = payload.get("competition", {}) or {}
-    competition_teams = payload.get("teams", [])
-    competition_code = payload.get("competition_code", "PD")
 
-    # dims containers
-    dates: Set[str] = set()
-    teams: Dict[int, Dict[str, Any]] = {}
-    competitions: Dict[int, Dict[str, Any]] = {}
-    players: Dict[int, Dict[str, Any]] = {}
-
-    fact_matches: List[Dict[str, Any]] = []
-
-    # competition (minimal)
-    comp_id = competition_meta.get("id")
-    competitions[_safe_int(comp_id, 1)] = {
-        "competition_id": _safe_int(comp_id, 1),
-        "competition_name": competition_meta.get("name") or competition_code,
-        "country": (competition_meta.get("area") or {}).get("name"),
+def _build_competition_rows(competition_meta: Record, competition_code: str) -> dict[int, Record]:
+    competition_id = _safe_int(competition_meta.get("id"), 1)
+    return {
+        competition_id: {
+            "competition_id": competition_id,
+            "competition_name": competition_meta.get("name") or competition_code,
+            "country": (competition_meta.get("area") or {}).get("name"),
+        }
     }
 
-    # teams from competition endpoint
-    for t in competition_teams:
-        if t.get("id") is None:
-            continue
-        tid = int(t["id"])
-        teams[tid] = {
-            "team_id": tid,
-            "team_name": t.get("name") or t.get("shortName"),
-            "country": (t.get("area") or {}).get("name"),
-        }
 
-    # players from multi-team squads (new payload shape)
-    for entry in squads_by_team:
-        team_meta = entry.get("team", {}) or {}
+def _build_team_row(team: Record) -> Record:
+    return {
+        "team_id": int(team["id"]),
+        "team_name": team.get("name") or team.get("shortName"),
+        "country": (team.get("area") or {}).get("name"),
+    }
+
+
+def _load_competition_teams(competition_teams: list[Record], teams: dict[int, Record]) -> None:
+    for team in competition_teams:
+        if team.get("id") is None:
+            continue
+        team_id = int(team["id"])
+        teams[team_id] = _build_team_row(team)
+
+
+def _load_players_from_squads(
+    squads_by_team: list[Record],
+    teams: dict[int, Record],
+    players: dict[int, Record],
+) -> None:
+    for squad_entry in squads_by_team:
+        team_meta = squad_entry.get("team", {}) or {}
         team_id_raw = team_meta.get("id")
         if team_id_raw is None:
             continue
-        team_id = int(team_id_raw)
 
+        team_id = int(team_id_raw)
         teams.setdefault(
             team_id,
             {
@@ -196,80 +218,101 @@ def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
             },
         )
 
-        for p in entry.get("squad", []) or []:
-            if p.get("id") is None:
+        for player in squad_entry.get("squad", []) or []:
+            if player.get("id") is None:
                 continue
-            pid = int(p["id"])
-            players[pid] = {
-                "player_id": pid,
-                "full_name": p.get("name"),
-                "position": p.get("position"),
-                "nationality": p.get("nationality"),
-                "birth_date": p.get("dateOfBirth"),
+            player_id = int(player["id"])
+            players[player_id] = {
+                "player_id": player_id,
+                "full_name": player.get("name"),
+                "position": player.get("position"),
+                "nationality": player.get("nationality"),
+                "birth_date": player.get("dateOfBirth"),
                 "photo_url": None,
                 "team_id": team_id,
             }
 
-    # players from single-team squad (legacy payload shape)
+
+def _load_players_from_legacy_squad(payload: Payload, players: dict[int, Record]) -> None:
     legacy_team_id = _safe_int((payload.get("team") or {}).get("id"))
-    for p in squad:
-        if p.get("id") is None or legacy_team_id == 0:
+    for player in payload.get("squad", []):
+        if player.get("id") is None or legacy_team_id == 0:
             continue
-        pid = int(p["id"])
-        players[pid] = {
-            "player_id": pid,
-            "full_name": p.get("name"),
-            "position": p.get("position"),
-            "nationality": p.get("nationality"),
-            "birth_date": p.get("dateOfBirth"),
+
+        player_id = int(player["id"])
+        players[player_id] = {
+            "player_id": player_id,
+            "full_name": player.get("name"),
+            "position": player.get("position"),
+            "nationality": player.get("nationality"),
+            "birth_date": player.get("dateOfBirth"),
             "photo_url": None,
             "team_id": legacy_team_id,
         }
 
-    # teams + matches
-    for m in matches:
-        match_id = int(m["id"])
-        utc_date = m.get("utcDate")  # e.g. 2024-08-18T19:30:00Z
-        if utc_date:
-            date_id = utc_date[:10]
-            dates.add(date_id)
-        else:
-            date_id = None
 
-        home = m.get("homeTeam", {})
-        away = m.get("awayTeam", {})
+def _update_match_teams(home_team: Record, away_team: Record, teams: dict[int, Record]) -> None:
+    for team in (home_team, away_team):
+        if team.get("id") is None:
+            continue
+        team_id = int(team["id"])
+        teams[team_id] = {
+            "team_id": team_id,
+            "team_name": team.get("name"),
+            "country": None,
+        }
 
-        for t in (home, away):
-            if t.get("id") is None:
-                continue
-            tid = int(t["id"])
-            teams[tid] = {
-                "team_id": tid,
-                "team_name": t.get("name"),
-                "country": None,
-            }
 
-        score = m.get("score", {}).get("fullTime", {})
-        fact_matches.append(
-            {
-                "match_id": match_id,
-                "date_id": date_id,
-                "competition_id": _safe_int(comp_id, 1),
-                "home_team_id": int(home["id"]),
-                "away_team_id": int(away["id"]),
-                "home_score": score.get("home"),
-                "away_score": score.get("away"),
-            }
-        )
+def _build_football_data_match_row(
+    match: Record,
+    competition_id: int,
+    date_values: set[str],
+) -> Record:
+    utc_date = match.get("utcDate")
+    date_id = utc_date[:10] if utc_date else None
+    if date_id:
+        date_values.add(date_id)
 
-    dim_dates = []
-    for d in sorted(dates):
-        dt = datetime.strptime(d, "%Y-%m-%d")
-        dim_dates.append({"date_id": d, "year": dt.year, "month": dt.month, "day": dt.day})
+    home_team = match.get("homeTeam", {})
+    away_team = match.get("awayTeam", {})
+    score = match.get("score", {}).get("fullTime", {})
 
-    # player match stats not available here (free tier limitation)
     return {
-        "dim_date": dim_dates,
+        "match_id": int(match["id"]),
+        "date_id": date_id,
+        "competition_id": competition_id,
+        "home_team_id": int(home_team["id"]),
+        "away_team_id": int(away_team["id"]),
+        "home_score": score.get("home"),
+        "away_score": score.get("away"),
+    }
+
+
+def transform_football_data(payload: Payload) -> TransformedData:
+    matches = payload.get("matches", [])
+    competition_meta = payload.get("competition", {}) or {}
+    competition_teams = payload.get("teams", [])
+    competition_code = payload.get("competition_code", "PD")
+
+    date_values: set[str] = set()
+    teams: dict[int, Record] = {}
+    players: dict[int, Record] = {}
+    competitions = _build_competition_rows(competition_meta, competition_code)
+    competition_id = next(iter(competitions))
+
+    _load_competition_teams(competition_teams, teams)
+    _load_players_from_squads(payload.get("squads_by_team", []), teams, players)
+    _load_players_from_legacy_squad(payload, players)
+
+    fact_matches: TableRows = []
+    for match in matches:
+        home_team = match.get("homeTeam", {})
+        away_team = match.get("awayTeam", {})
+        _update_match_teams(home_team, away_team, teams)
+        fact_matches.append(_build_football_data_match_row(match, competition_id, date_values))
+
+    return {
+        "dim_date": _build_dim_date(date_values),
         "dim_team": list(teams.values()),
         "dim_competition": list(competitions.values()),
         "dim_player": list(players.values()),
@@ -277,5 +320,6 @@ def transform_football_data(payload: Dict[str, Any]) -> Dict[str, Any]:
         "fact_player_match_stats": [],
     }
 
-def count_loaded(transformed: Dict[str, Any]) -> int:
-    return sum(len(v) for v in transformed.values())
+
+def count_loaded(transformed: TransformedData) -> int:
+    return sum(len(rows) for rows in transformed.values())

@@ -38,7 +38,6 @@ services:
       STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL}
       FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND}
       FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES}
-      
 
   dashboard:
     build:
@@ -65,10 +64,7 @@ services:
       FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND}
     ports:
       - "${DASHBOARD_PORT:-9001}:8501"
-    # relance si crash
     restart: "always"
-
-    
 
 volumes:
   pgdata:
