@@ -13,10 +13,41 @@ from data.dashboard_data import (
 )
 from state.filters import render_global_filters, require_team_selection
 from ui.charts import render_form_chart, render_home_away_chart, render_position_curve
-from ui.display import render_result_strip, render_team_header
+from ui.display import render_note_card, render_page_banner, render_result_strip, render_section_heading, render_team_header
 from ui.styles import inject_dashboard_styles
 
-st.set_page_config(page_title="Team - Football Data Platform", layout="wide")
+st.set_page_config(page_title="TEAM - Football Data Platform", layout="wide")
+
+
+def _render_goal_cards(kpis: dict[str, int | float | None]) -> None:
+    st.markdown(
+        f"""
+        <div class="fdp-signal-grid">
+          <div class="fdp-signal-card">
+            <div class="fdp-signal-label">Goals For</div>
+            <div class="fdp-signal-value" style="color:#168a5b;">{int(kpis["goals_for"])}</div>
+            <div class="fdp-signal-sub">Buts marques sur le perimetre filtre</div>
+          </div>
+          <div class="fdp-signal-card">
+            <div class="fdp-signal-label">Goals Against</div>
+            <div class="fdp-signal-value" style="color:#cf3f4f;">{int(kpis["goals_against"])}</div>
+            <div class="fdp-signal-sub">Buts encaisses sur le perimetre filtre</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _style_goal_split(df: pd.DataFrame):
+    if df.empty:
+        return df.style
+
+    return (
+        df.style.format({"GoalsFor": "{:.0f}", "GoalsAgainst": "{:.0f}", "Points": "{:.0f}", "Matches": "{:.0f}"})
+        .map(lambda _: "color:#168a5b;font-weight:700;", subset=["GoalsFor"])
+        .map(lambda _: "color:#cf3f4f;font-weight:700;", subset=["GoalsAgainst"])
+    )
 
 
 def _prepare_form_df(matches: pd.DataFrame, limit: int) -> pd.DataFrame:
@@ -37,7 +68,11 @@ def _format_team_calendar(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     out = df.copy()
-    kickoff = pd.to_datetime(out["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
+    kickoff = (
+        pd.to_datetime(out["kickoff_utc"], errors="coerce", utc=True)
+        .dt.tz_convert("Europe/Paris")
+        .dt.strftime("%Y-%m-%d %H:%M")
+    )
     fallback = pd.to_datetime(out["date_dt"], errors="coerce").dt.strftime("%Y-%m-%d")
     out["kickoff"] = kickoff.fillna(fallback).fillna("Unknown")
     out["score"] = out.apply(
@@ -46,15 +81,19 @@ def _format_team_calendar(df: pd.DataFrame) -> pd.DataFrame:
     )
     out["result"] = out["result"].fillna("-")
     out["status"] = out["status"].fillna("UNKNOWN")
-    out["matchday"] = out["matchday"].fillna("—")
+    out["matchday"] = out["matchday"].fillna("--")
     return out[["kickoff", "matchday", "status", "venue", "opponent_name", "score", "result", "points"]]
 
 
 def main() -> None:
     inject_dashboard_styles()
-    st.title("Team")
+    render_page_banner(
+        "TEAM",
+        "Lecture club par club: forme recente, split domicile/exterieur, calendrier et trajectoire au classement.",
+        "Team.png",
+    )
     filters = render_global_filters("team")
-    st.caption(describe_season_source(filters.season))
+    render_note_card(describe_season_source(filters.season))
     filters = require_team_selection(filters)
     if filters is None:
         return
@@ -68,22 +107,24 @@ def main() -> None:
     top[1].metric("Matches", kpis["matches"])
     top[2].metric("Goal Diff", kpis["goal_diff"])
     top[3].metric("Win Rate", "-" if kpis["win_rate"] is None else f"{kpis['win_rate']}%")
+    _render_goal_cards(kpis)
 
     base_matches = get_matches(filters.competition_id, filters.season, filters.team_id, filters.date_start, filters.date_end)
     perspective = build_perspective_table(base_matches, team_id=filters.team_id)
     form5 = _prepare_form_df(perspective, 5)
     form10 = _prepare_form_df(perspective, 10)
 
+    render_section_heading("Forme recente", "Une lecture courte sur 5 matchs et une dynamique plus longue sur 10 matchs.")
     left, right = st.columns([1, 2])
     with left:
-        st.subheader("Forme 5 matchs")
+        st.markdown("<div class='fdp-section-title' style='margin-top:0;'>Forme 5 matchs</div>", unsafe_allow_html=True)
         render_result_strip(form5["result"].dropna().tolist())
         st.metric("Points (5)", int(form5["points"].sum()) if not form5.empty else 0)
     with right:
-        st.subheader("Forme 10 matchs")
+        st.markdown("<div class='fdp-section-title' style='margin-top:0;'>Forme 10 matchs</div>", unsafe_allow_html=True)
         render_form_chart(form10)
 
-    st.subheader("Domicile / Exterieur")
+    render_section_heading("Domicile / Exterieur")
     split = get_home_away_split(filters.competition_id, filters.season, filters.team_id, (filters.date_start, filters.date_end))
     if split.empty:
         st.info("Aucun match joue pour calculer le split domicile/exterieur.")
@@ -92,9 +133,9 @@ def main() -> None:
         with c1:
             render_home_away_chart(split)
         with c2:
-            st.dataframe(split, hide_index=True, use_container_width=True)
+            st.dataframe(_style_goal_split(split), hide_index=True, use_container_width=True)
 
-    st.subheader("Calendrier")
+    render_section_heading("Calendrier", "Derniers matchs et prochaines affiches pour le club selectionne.")
     recent, upcoming = get_recent_matches(
         competition_id=filters.competition_id,
         season=filters.season,
@@ -103,14 +144,8 @@ def main() -> None:
         recent_limit=10,
         upcoming_limit=5,
     )
-    if not recent.empty:
-        recent_view = build_perspective_table(recent, team_id=filters.team_id)
-    else:
-        recent_view = pd.DataFrame()
-    if not upcoming.empty:
-        upcoming_view = build_perspective_table(upcoming, team_id=filters.team_id)
-    else:
-        upcoming_view = pd.DataFrame()
+    recent_view = build_perspective_table(recent, team_id=filters.team_id) if not recent.empty else pd.DataFrame()
+    upcoming_view = build_perspective_table(upcoming, team_id=filters.team_id) if not upcoming.empty else pd.DataFrame()
 
     cal_left, cal_right = st.columns(2)
     with cal_left:
@@ -126,10 +161,10 @@ def main() -> None:
         else:
             st.dataframe(_format_team_calendar(upcoming_view), hide_index=True, use_container_width=True)
 
-    st.subheader("Courbe de classement")
+    render_section_heading("Courbe de classement")
     curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)
     if curve.empty:
-        st.info("Pas de donnees de classement pour cette equipe. Lance le pipeline avec DATA_MODE=csv ou DATA_MODE=api.")
+        st.info("Pas de donnees de classement pour cette equipe. Relance la synchronisation des donnees si besoin.")
     else:
         render_position_curve(curve)
 

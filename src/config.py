@@ -54,6 +54,13 @@ def _parse_int(value: str | None, *, field_name: str, default: int) -> int:
     return parsed
 
 
+def _parse_competition_codes(value: str | None, *, default_code: str) -> tuple[str, ...]:
+    if value is None or not value.strip():
+        return ("PD", "PL", "SA", "BL1", "FL1")
+    codes = tuple(code.strip().upper() for code in value.split(",") if code.strip())
+    return codes or (default_code.upper(),)
+
+
 @dataclass(frozen=True)
 class Settings:
     db_host: str = "localhost"
@@ -65,6 +72,7 @@ class Settings:
     football_data_token: str | None = None
     football_data_base_url: str = "https://api.football-data.org/v4"
     competition_code: str = "PD"
+    live_competition_codes: tuple[str, ...] = ("PD", "PL", "SA", "BL1", "FL1")
     data_mode: Literal["mock", "api", "csv", "hybrid"] = "api"
     incremental: bool = False
     incremental_days: int = 14
@@ -121,6 +129,10 @@ class Settings:
                 or "https://api.football-data.org/v4"
             ),
             competition_code=_first_value(source, ("COMPETITION_CODE", "FOOTBALL_DATA_COMPETITION"), "PD") or "PD",
+            live_competition_codes=_parse_competition_codes(
+                _first_value(source, ("LIVE_COMPETITION_CODES",)),
+                default_code=_first_value(source, ("COMPETITION_CODE", "FOOTBALL_DATA_COMPETITION"), "PD") or "PD",
+            ),
             data_mode=data_mode,  # type: ignore[arg-type]
             incremental=_parse_bool(_first_value(source, ("INCREMENTAL",), "false"), default=False),
             incremental_days=_parse_int(

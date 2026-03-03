@@ -4,16 +4,32 @@ import streamlit as st
 from data.dashboard_data import describe_season_source, get_current_standings, get_kpis, get_recent_matches, get_standings_curve
 from state.filters import render_global_filters
 from ui.charts import render_position_curve
+from ui.display import render_note_card, render_page_banner, render_section_heading
 from ui.styles import inject_dashboard_styles
 
-st.set_page_config(page_title="Overview - Football Data Platform", layout="wide")
+st.set_page_config(page_title="OVERVIEW - Football Data Platform", layout="wide")
+
+
+def _trend_symbol(delta: object) -> str:
+    if pd.isna(delta):
+        return "="
+    delta_value = int(delta)
+    if delta_value > 0:
+        return f"↑{delta_value}"
+    if delta_value < 0:
+        return f"↓{abs(delta_value)}"
+    return "="
 
 
 def _format_match_table(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     table = df.copy()
-    kickoff = pd.to_datetime(table["kickoff_utc"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d %H:%M")
+    kickoff = (
+        pd.to_datetime(table["kickoff_utc"], errors="coerce", utc=True)
+        .dt.tz_convert("Europe/Paris")
+        .dt.strftime("%Y-%m-%d %H:%M")
+    )
     fallback = pd.to_datetime(table["match_date"], errors="coerce").dt.strftime("%Y-%m-%d")
     table["kickoff"] = kickoff.fillna(fallback).fillna("Unknown")
     table["score"] = table.apply(
@@ -21,15 +37,19 @@ def _format_match_table(df: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
     table["status"] = table["status"].fillna("UNKNOWN")
-    table["matchday"] = table["matchday"].fillna("—")
+    table["matchday"] = table["matchday"].fillna("--")
     return table[["kickoff", "status", "matchday", "home_team", "score", "away_team"]]
 
 
 def main() -> None:
     inject_dashboard_styles()
-    st.title("Overview")
+    render_page_banner(
+        "OVERVIEW",
+        "Vue analytique filtree: KPIs, calendrier et dernier classement disponible pour le perimetre selectionne.",
+        "Overview.png",
+    )
     filters = render_global_filters("overview")
-    st.caption(describe_season_source(filters.season))
+    render_note_card(describe_season_source(filters.season))
 
     kpis = get_kpis(
         competition_id=filters.competition_id,
@@ -46,14 +66,18 @@ def main() -> None:
     cols[4].metric("Win Rate", "-" if kpis["win_rate"] is None else f"{kpis['win_rate']}%")
 
     standings = get_current_standings(filters.competition_id, filters.season)
-    st.subheader("Classement courant")
+    render_section_heading(
+        "Dernier classement disponible",
+        "Le classement depend surtout de la competition et de la saison choisies. La plage de dates agit surtout sur les KPI et le calendrier.",
+    )
     if standings.empty:
-        st.info("Aucun snapshot de classement disponible. Lance le pipeline avec DATA_MODE=csv ou DATA_MODE=api.")
+        st.info("Aucun snapshot de classement disponible. Relance la synchronisation des donnees pour alimenter cette vue.")
     else:
         standings_display = standings.rename(
             columns={
                 "team_name": "Equipe",
                 "position": "Pos",
+                "position_delta": "Trend",
                 "points": "Pts",
                 "played_games": "MJ",
                 "won": "G",
@@ -64,20 +88,21 @@ def main() -> None:
                 "goal_difference": "Diff",
             }
         )
+        standings_display["Trend"] = standings_display["Trend"].map(_trend_symbol)
         st.dataframe(
-            standings_display[["Pos", "Equipe", "Pts", "MJ", "G", "N", "P", "BP", "BC", "Diff"]],
+            standings_display[["Pos", "Trend", "Equipe", "Pts", "MJ", "G", "N", "P", "BP", "BC", "Diff"]],
             hide_index=True,
             use_container_width=True,
         )
 
-    st.subheader("Position au fil des journees")
+    render_section_heading("Position au fil des journees")
     curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)
     if curve.empty:
         st.info("Pas de donnees de classement disponibles pour ce filtre.")
     else:
         render_position_curve(curve)
 
-    st.subheader("Calendrier")
+    render_section_heading("Calendrier", "Derniers matchs joues et prochaines affiches sur le scope filtre.")
     recent_matches, upcoming_matches = get_recent_matches(
         competition_id=filters.competition_id,
         season=filters.season,

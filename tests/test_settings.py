@@ -37,6 +37,12 @@ def test_settings_accepts_hybrid_mode():
     assert settings.data_mode == "hybrid"
 
 
+def test_settings_parses_live_competition_codes():
+    settings = Settings.from_env({"LIVE_COMPETITION_CODES": "PD, PL,SA, BL1 , FL1"})
+
+    assert settings.live_competition_codes == ("PD", "PL", "SA", "BL1", "FL1")
+
+
 def test_incremental_window_uses_today_minus_days_plus_one():
     window = calculate_incremental_window(days=14, today=date(2026, 3, 2))
 

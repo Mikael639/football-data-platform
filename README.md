@@ -29,6 +29,7 @@ Important environment variables:
 - `PIPELINE_MODE=api` uses `football-data.org`.
 - `DATA_MODE=csv` loads historical La Liga matches from `data/raw/*_cleaned.csv`.
 - `DATA_MODE=hybrid` loads CSV history first, then merges the current live season from `football-data.org`.
+- `LIVE_COMPETITION_CODES=PD,PL,SA,BL1,FL1` controls which live competitions are ingested for `api` and `hybrid`.
 - `INCREMENTAL=true` limits API match extraction to the rolling `INCREMENTAL_DAYS` window.
 - `DB_*` controls the local PostgreSQL connection for pipeline and dashboard.
 - `DATABASE_URL` can override the computed PostgreSQL URL when needed.
@@ -88,7 +89,7 @@ After `fact_match` is loaded, the pipeline computes `fact_standings_snapshot` fr
 `DATA_MODE=hybrid` is the recommended production mode when you want:
 
 - historical seasons from `data/raw/*_cleaned.csv`
-- the current La Liga season from `football-data.org`
+- the current top-league seasons from `football-data.org`
 
 The pipeline transforms both sources, merges the warehouse tables, keeps the richer team metadata when the same club exists in both sources, then recomputes `fact_standings_snapshot` from the final `fact_match` table.
 
@@ -105,6 +106,7 @@ Pages:
 - `Team`: header equipe, forme 5/10 matchs, split domicile/exterieur, calendrier et courbe de classement.
 - `Monitoring`: runs pipeline, durees/volumes, checks DQ par `run_id`.
 - `Joueurs`: effectif en base pour le club filtre.
+- `Live Leagues`: dernier classement disponible en base par competition chargee.
 
 ## Run Locally
 

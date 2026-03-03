@@ -30,12 +30,14 @@ def extract_from_mock() -> dict[str, Any]:
 
 
 def count_extracted(payload: dict[str, Any]) -> int:
-    if "csv_payload" in payload or "api_payload" in payload:
+    if "csv_payload" in payload or "api_payload" in payload or "api_payloads" in payload:
         total = 0
         if "csv_payload" in payload:
             total += count_extracted(payload["csv_payload"])
         if "api_payload" in payload:
             total += count_extracted(payload["api_payload"])
+        if "api_payloads" in payload:
+            total += sum(count_extracted(item) for item in payload["api_payloads"])
         return total
     # Mock payload
     if "fixtures" in payload:
@@ -411,8 +413,9 @@ def _fetch_standings_payload(
 # -----------------------
 # football-data extract (all LaLiga clubs, current season)
 # -----------------------
-def extract_football_data_laliga_all_clubs(
+def extract_football_data_competition(
     settings: Settings | None = None,
+    competition_code: str | None = None,
     today: date | None = None,
 ) -> dict[str, Any]:
     resolved_settings = settings or get_settings()
@@ -420,7 +423,7 @@ def extract_football_data_laliga_all_clubs(
     if not token:
         raise RuntimeError("Missing FOOTBALL_DATA_TOKEN in environment")
 
-    competition_code = resolved_settings.competition_code
+    competition_code = competition_code or resolved_settings.competition_code
     season = resolved_current_season_start_year()
     base_url = resolved_settings.football_data_base_url or DEFAULT_BASE_URL
     match_params = _build_match_query_params(resolved_settings, season, today=today)
@@ -489,6 +492,28 @@ def extract_football_data_laliga_all_clubs(
         if resolved_settings.incremental
         else None,
     }
+
+
+def extract_football_data_live_competitions(
+    settings: Settings | None = None,
+    today: date | None = None,
+) -> list[dict[str, Any]]:
+    resolved_settings = settings or get_settings()
+    return [
+        extract_football_data_competition(settings=resolved_settings, competition_code=competition_code, today=today)
+        for competition_code in resolved_settings.live_competition_codes
+    ]
+
+
+def extract_football_data_laliga_all_clubs(
+    settings: Settings | None = None,
+    today: date | None = None,
+) -> dict[str, Any]:
+    """
+    Backward-compatible helper kept for existing imports.
+    Returns the payload for the primary competition configured in COMPETITION_CODE.
+    """
+    return extract_football_data_competition(settings=settings, competition_code=(settings or get_settings()).competition_code, today=today)
 
 
 def extract_football_data_laliga_real_madrid(

@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-from datetime import date as dt_date
-
 import streamlit as st
 
 from data.dashboard_data import (
     DashboardFilters,
     get_competitions,
-    get_date_bounds,
-    get_default_date_range,
     get_seasons,
     get_teams,
 )
@@ -16,8 +12,8 @@ from data.dashboard_data import (
 
 def _competition_options() -> tuple[list[str], dict[str, int | None]]:
     competitions = get_competitions()
-    labels: list[str] = []
-    mapping: dict[str, int | None] = {}
+    labels: list[str] = ["Toutes les competitions"]
+    mapping: dict[str, int | None] = {"Toutes les competitions": None}
     for _, row in competitions.iterrows():
         label = str(row["competition_name"])
         mapping[label] = None if row["competition_id"] is None else int(row["competition_id"])
@@ -27,8 +23,8 @@ def _competition_options() -> tuple[list[str], dict[str, int | None]]:
 
 def _season_options(competition_id: int | None) -> tuple[list[str], dict[str, str | None]]:
     seasons = get_seasons(competition_id)
-    labels = ["Toutes"]
-    mapping: dict[str, str | None] = {"Toutes": None}
+    labels = ["Toutes les saisons"]
+    mapping: dict[str, str | None] = {"Toutes les saisons": None}
     for _, row in seasons.iterrows():
         label = str(row["season"])
         labels.append(label)
@@ -52,9 +48,8 @@ def render_global_filters(page_key: str) -> DashboardFilters:
 
     competition_labels, competition_map = _competition_options()
     competition_key = f"{page_key}_competition"
-    default_competition = st.session_state.get(competition_key, competition_labels[0] if competition_labels else None)
-    if default_competition not in competition_labels and competition_labels:
-        default_competition = competition_labels[0]
+    if st.session_state.get(competition_key) not in competition_labels and competition_labels:
+        st.session_state[competition_key] = competition_labels[0]
     selected_competition = st.sidebar.selectbox(
         "Competition",
         competition_labels,
@@ -65,9 +60,8 @@ def render_global_filters(page_key: str) -> DashboardFilters:
 
     season_labels, season_map = _season_options(competition_id)
     season_key = f"{page_key}_season"
-    preferred_default_season = season_labels[1] if len(season_labels) > 1 else season_labels[0]
     if st.session_state.get(season_key) not in season_labels and season_labels:
-        st.session_state[season_key] = preferred_default_season
+        st.session_state[season_key] = season_labels[0]
     selected_season = st.sidebar.selectbox("Saison", season_labels, key=season_key)
     season = season_map.get(selected_season)
 
@@ -78,17 +72,12 @@ def render_global_filters(page_key: str) -> DashboardFilters:
     selected_team = st.sidebar.selectbox("Equipe", team_labels, key=team_key)
     team_id = team_map.get(selected_team)
 
-    bounds = get_date_bounds(competition_id, season, team_id)
-    default_start, default_end = get_default_date_range(bounds)
-    default_date_value: tuple[dt_date, dt_date] | tuple[()] = ()
-    if default_start and default_end:
-        default_date_value = (dt_date.fromisoformat(default_start), dt_date.fromisoformat(default_end))
     date_key = f"{page_key}_date_range"
     selected_dates = st.sidebar.date_input(
         "Plage de dates",
-        value=st.session_state.get(date_key, default_date_value),
-        key=date_key,
+        value=st.session_state.get(date_key, ()),
     )
+    st.session_state[date_key] = selected_dates
 
     date_start = None
     date_end = None

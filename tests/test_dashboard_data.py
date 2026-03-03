@@ -17,6 +17,8 @@ from dashboard.data.dashboard_data import (
     compute_team_kpis,
     describe_season_source,
     get_current_standings,
+    get_live_league_tables,
+    get_teams,
 )
 
 
@@ -120,7 +122,8 @@ def test_build_match_where_clause_includes_all_filters(monkeypatch):
     )
 
     assert "m.competition_id = :competition_id" in clause
-    assert "team_id" in params
+    assert "(m.home_team_id IN (" in clause
+    assert any(key.startswith("team_id_") for key in params)
     assert params["season"] == "2025-2026"
     assert params["date_start"] == "2025-08-01"
 
@@ -193,4 +196,77 @@ def test_dashboard_overview_uses_snapshot(monkeypatch):
 
 def test_describe_season_source_distinguishes_current_and_historical_seasons():
     assert "football-data.org" in describe_season_source("2025-2026")
-    assert "historique CSV" in describe_season_source("2024-2025")
+    assert "historique consolide" in describe_season_source("2024-2025")
+
+
+def test_get_teams_groups_alias_variants(monkeypatch):
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data._read_sql",
+        lambda query, params=None: pd.DataFrame(
+            [
+                {"team_id": 81, "team_name": "FC Barcelona", "short_name": "Barca", "crest_url": "crest"},
+                {"team_id": 529, "team_name": "Barcelona", "short_name": None, "crest_url": None},
+                {"team_id": 86, "team_name": "Real Madrid CF", "short_name": "Real Madrid", "crest_url": "crest"},
+                {"team_id": 541, "team_name": "Real Madrid", "short_name": None, "crest_url": None},
+            ]
+        ),
+    )
+
+    teams = get_teams(2014, None)
+
+    assert len(teams) == 2
+    assert teams["team_name"].tolist() == ["Barcelona", "Real Madrid"]
+    assert teams.iloc[0]["alias_team_ids"] == [81, 529]
+
+
+def test_get_live_league_tables_groups_by_competition(monkeypatch):
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data._read_sql",
+        lambda query, params=None: pd.DataFrame(
+            [
+                {
+                    "competition_id": 2014,
+                    "competition_name": "Primera Division",
+                    "season": 2025,
+                    "matchday": 26,
+                    "team_id": 81,
+                    "team_name": "Barcelona",
+                    "short_name": "Barca",
+                    "crest_url": None,
+                    "position": 1,
+                    "points": 57,
+                    "played_games": 26,
+                    "won": 18,
+                    "draw": 3,
+                    "lost": 5,
+                    "goals_for": 71,
+                    "goals_against": 25,
+                    "goal_difference": 46,
+                },
+                {
+                    "competition_id": 2021,
+                    "competition_name": "Premier League",
+                    "season": 2025,
+                    "matchday": 27,
+                    "team_id": 65,
+                    "team_name": "Manchester City",
+                    "short_name": "Man City",
+                    "crest_url": None,
+                    "position": 1,
+                    "points": 61,
+                    "played_games": 27,
+                    "won": 19,
+                    "draw": 4,
+                    "lost": 4,
+                    "goals_for": 60,
+                    "goals_against": 24,
+                    "goal_difference": 36,
+                },
+            ]
+        ),
+    )
+
+    league_tables = get_live_league_tables()
+
+    assert set(league_tables) == {"Premier League", "LaLiga"}
+    assert int(league_tables["LaLiga"].iloc[0]["matchday"]) == 26

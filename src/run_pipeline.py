@@ -9,7 +9,12 @@ from typing import Any
 from sqlalchemy import text
 
 from src.config import Settings, get_settings
-from src.extract import count_extracted, extract_csv, extract_football_data_laliga_all_clubs, extract_from_mock
+from src.extract import (
+    count_extracted,
+    extract_csv,
+    extract_football_data_live_competitions,
+    extract_from_mock,
+)
 from src.load import cleanup_legacy_fact_rows_for_csv, load_all, load_standings_snapshot
 from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
 from src.standings import compute_standings_snapshot
@@ -181,22 +186,45 @@ def _run_extract(settings: Settings) -> tuple[dict[str, Any], int]:
         return payload, count_extracted(payload)
     if settings.data_mode == "hybrid":
         csv_payload = extract_csv(settings=settings)
-        api_payload = extract_football_data_laliga_all_clubs(settings=settings)
+        api_payloads = extract_football_data_live_competitions(settings=settings)
+        primary_api_payload = next(
+            (payload for payload in api_payloads if payload.get("competition_code") == settings.competition_code),
+            api_payloads[0],
+        )
         payload = {
             "source": "hybrid",
             "csv_payload": csv_payload,
-            "api_payload": api_payload,
+            "api_payload": primary_api_payload,
+            "api_payloads": api_payloads,
             "competition_code": settings.competition_code,
-            "matches": api_payload.get("matches", []),
+            "matches": primary_api_payload.get("matches", []),
             "match_candidates": csv_payload.get("match_candidates", []),
-            "incremental_window": api_payload.get("incremental_window"),
-            "season": api_payload.get("season"),
-            "standings": api_payload.get("standings"),
-            "standings_matchday": api_payload.get("standings_matchday"),
+            "incremental_window": primary_api_payload.get("incremental_window"),
+            "season": primary_api_payload.get("season"),
+            "standings": primary_api_payload.get("standings"),
+            "standings_matchday": primary_api_payload.get("standings_matchday"),
         }
         return payload, count_extracted(payload)
 
-    payload = extract_football_data_laliga_all_clubs(settings=settings)
+    api_payloads = extract_football_data_live_competitions(settings=settings)
+    if len(api_payloads) == 1:
+        payload = api_payloads[0]
+    else:
+        primary_api_payload = next(
+            (item for item in api_payloads if item.get("competition_code") == settings.competition_code),
+            api_payloads[0],
+        )
+        payload = {
+            "source": "football-data.org",
+            "api_payload": primary_api_payload,
+            "api_payloads": api_payloads,
+            "competition_code": primary_api_payload.get("competition_code"),
+            "matches": primary_api_payload.get("matches", []),
+            "incremental_window": primary_api_payload.get("incremental_window"),
+            "season": primary_api_payload.get("season"),
+            "standings": primary_api_payload.get("standings"),
+            "standings_matchday": primary_api_payload.get("standings_matchday"),
+        }
     return payload, count_extracted(payload)
 
 
@@ -207,8 +235,11 @@ def _run_transform(settings: Settings, payload: dict[str, Any]) -> dict[str, lis
         return transform_csv_to_tables(payload)
     if settings.data_mode == "hybrid":
         csv_transformed = transform_csv_to_tables(payload["csv_payload"])
-        api_transformed = transform_football_data(payload["api_payload"])
-        return merge_transformed_data(csv_transformed, api_transformed)
+        api_datasets = [transform_football_data(item) for item in payload.get("api_payloads", [payload["api_payload"]])]
+        return merge_transformed_data(csv_transformed, *api_datasets)
+    if "api_payloads" in payload:
+        api_datasets = [transform_football_data(item) for item in payload["api_payloads"]]
+        return merge_transformed_data(*api_datasets)
     return transform_football_data(payload)
 
 

@@ -17,6 +17,45 @@ def laliga_logo_source() -> str:
     return str(DEFAULT_LALIGA_BADGE_SVG)
 
 
+def asset_image_path(filename: str) -> str | None:
+    image_path = ASSETS_DIR / filename
+    transparent_path = image_path.with_name(f"{image_path.stem}-transparent{image_path.suffix}")
+    if transparent_path.exists():
+        return str(transparent_path)
+    if not image_path.exists():
+        return None
+    return str(image_path)
+
+
+def render_page_banner(title: str, subtitle: str, image_name: str) -> None:
+    image_path = asset_image_path(image_name)
+    left, right = st.columns([5, 1], vertical_alignment="center")
+    with left:
+        st.markdown(
+            f"""
+            <div class="fdp-page-banner">
+              <div class="fdp-page-banner-kicker">MATCH CENTER</div>
+              <div class="fdp-page-banner-title">{title}</div>
+              <div class="fdp-page-banner-sub">{subtitle}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right:
+        if image_path:
+            st.image(image_path, width=140)
+
+
+def render_section_heading(title: str, subtitle: str | None = None) -> None:
+    st.markdown(f"<div class='fdp-section-title'>{title}</div>", unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f"<div class='fdp-section-sub'>{subtitle}</div>", unsafe_allow_html=True)
+
+
+def render_note_card(text: str) -> None:
+    st.markdown(f"<div class='fdp-note-card'>{text}</div>", unsafe_allow_html=True)
+
+
 def render_badge(status: str) -> str:
     palette = {
         "PASS": ("#e8f7ef", "#147a45"),
