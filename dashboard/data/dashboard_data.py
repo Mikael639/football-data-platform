@@ -55,6 +55,16 @@ def current_season_bounds(start_year: int) -> tuple[str, str]:
     return season_start.isoformat(), season_end.isoformat()
 
 
+def describe_season_source(season: str | None) -> str:
+    if season in {None, "", "Toutes"}:
+        return "Source: historique CSV + saison courante API"
+    return (
+        "Source probable: football-data.org (saison courante)"
+        if season == current_season_label(current_season_start_year_dash())
+        else "Source probable: historique CSV"
+    )
+
+
 def _season_start_from_label(season: str | None) -> int | None:
     if season in {None, "", "Toutes"}:
         return None

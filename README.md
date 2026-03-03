@@ -28,6 +28,7 @@ Important environment variables:
 - `PIPELINE_MODE=mock` runs the local mock payload.
 - `PIPELINE_MODE=api` uses `football-data.org`.
 - `DATA_MODE=csv` loads historical La Liga matches from `data/raw/*_cleaned.csv`.
+- `DATA_MODE=hybrid` loads CSV history first, then merges the current live season from `football-data.org`.
 - `INCREMENTAL=true` limits API match extraction to the rolling `INCREMENTAL_DAYS` window.
 - `DB_*` controls the local PostgreSQL connection for pipeline and dashboard.
 - `DATABASE_URL` can override the computed PostgreSQL URL when needed.
@@ -81,6 +82,15 @@ Only `La Liga` rows are loaded in this mode. Match rows are deduplicated from pl
 
 When the CSV does not contain a kickoff time, the pipeline stores `kickoff_utc` at `12:00:00Z` for that match date to keep the warehouse and dashboard usable.
 After `fact_match` is loaded, the pipeline computes `fact_standings_snapshot` from finished matches and matchdays so the dashboard can render classement and position curves without calling the API.
+
+## Hybrid Mode
+
+`DATA_MODE=hybrid` is the recommended production mode when you want:
+
+- historical seasons from `data/raw/*_cleaned.csv`
+- the current La Liga season from `football-data.org`
+
+The pipeline transforms both sources, merges the warehouse tables, keeps the richer team metadata when the same club exists in both sources, then recomputes `fact_standings_snapshot` from the final `fact_match` table.
 
 Start the dashboard:
 

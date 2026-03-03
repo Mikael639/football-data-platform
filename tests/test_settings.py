@@ -31,6 +31,12 @@ def test_settings_accepts_csv_mode():
     assert settings.data_mode == "csv"
 
 
+def test_settings_accepts_hybrid_mode():
+    settings = Settings.from_env({"DATA_MODE": "hybrid", "FOOTBALL_DATA_TOKEN": "token"})
+
+    assert settings.data_mode == "hybrid"
+
+
 def test_incremental_window_uses_today_minus_days_plus_one():
     window = calculate_incremental_window(days=14, today=date(2026, 3, 2))
 

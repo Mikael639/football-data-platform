@@ -13,7 +13,7 @@ from src.extract import count_extracted, extract_csv, extract_football_data_lali
 from src.load import cleanup_legacy_fact_rows_for_csv, load_all, load_standings_snapshot
 from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
 from src.standings import compute_standings_snapshot
-from src.transform import count_loaded, transform, transform_csv_to_tables, transform_football_data
+from src.transform import count_loaded, merge_transformed_data, transform, transform_csv_to_tables, transform_football_data
 from src.utils.db import get_engine
 from src.utils.logger import get_logger
 
@@ -179,6 +179,22 @@ def _run_extract(settings: Settings) -> tuple[dict[str, Any], int]:
     if settings.data_mode == "csv":
         payload = extract_csv(settings=settings)
         return payload, count_extracted(payload)
+    if settings.data_mode == "hybrid":
+        csv_payload = extract_csv(settings=settings)
+        api_payload = extract_football_data_laliga_all_clubs(settings=settings)
+        payload = {
+            "source": "hybrid",
+            "csv_payload": csv_payload,
+            "api_payload": api_payload,
+            "competition_code": settings.competition_code,
+            "matches": api_payload.get("matches", []),
+            "match_candidates": csv_payload.get("match_candidates", []),
+            "incremental_window": api_payload.get("incremental_window"),
+            "season": api_payload.get("season"),
+            "standings": api_payload.get("standings"),
+            "standings_matchday": api_payload.get("standings_matchday"),
+        }
+        return payload, count_extracted(payload)
 
     payload = extract_football_data_laliga_all_clubs(settings=settings)
     return payload, count_extracted(payload)
@@ -189,6 +205,10 @@ def _run_transform(settings: Settings, payload: dict[str, Any]) -> dict[str, lis
         return transform(payload)
     if settings.data_mode == "csv":
         return transform_csv_to_tables(payload)
+    if settings.data_mode == "hybrid":
+        csv_transformed = transform_csv_to_tables(payload["csv_payload"])
+        api_transformed = transform_football_data(payload["api_payload"])
+        return merge_transformed_data(csv_transformed, api_transformed)
     return transform_football_data(payload)
 
 
@@ -267,14 +287,15 @@ def main() -> None:
 
         load_started = time.perf_counter()
         loaded = load_all(engine, transformed)
-        if settings.data_mode == "csv":
+        if settings.data_mode in {"csv", "hybrid"}:
             cleanup_counts = cleanup_legacy_fact_rows_for_csv(engine)
             logger.info(
-                "Cleaned legacy match rows after csv load deleted_matches=%s deleted_player_match_stats=%s",
+                "Cleaned legacy match rows after %s load deleted_matches=%s deleted_player_match_stats=%s",
+                settings.data_mode,
                 cleanup_counts["deleted_matches"],
                 cleanup_counts["deleted_player_match_stats"],
             )
-        should_compute_standings = settings.data_mode == "csv" or not transformed.get("fact_standings_snapshot")
+        should_compute_standings = settings.data_mode in {"csv", "hybrid"} or not transformed.get("fact_standings_snapshot")
         if should_compute_standings:
             standings_result = compute_standings_snapshot(engine, scopes=_standings_scopes_from_transformed(transformed))
             computed_standings_rows = load_standings_snapshot(

@@ -522,5 +522,103 @@ def transform_csv_to_tables(payload: Payload) -> TransformedData:
     }
 
 
+def _normalize_team_name(value: Any) -> str:
+    return " ".join(str(value or "").strip().split()).casefold()
+
+
+def _team_row_priority(row: Record) -> tuple[int, int, int]:
+    return (
+        1 if row.get("crest_url") else 0,
+        1 if row.get("country") else 0,
+        1 if row.get("short_name") else 0,
+    )
+
+
+def merge_transformed_data(*datasets: TransformedData) -> TransformedData:
+    merged: TransformedData = {
+        "dim_date": [],
+        "dim_team": [],
+        "dim_competition": [],
+        "dim_player": [],
+        "fact_match": [],
+        "fact_player_match_stats": [],
+        "fact_standings_snapshot": [],
+    }
+    if not datasets:
+        return merged
+
+    all_team_rows: list[Record] = []
+    for dataset in datasets:
+        all_team_rows.extend(dataset.get("dim_team", []))
+
+    canonical_team_by_name: dict[str, Record] = {}
+    team_id_map: dict[int, int] = {}
+    for row in all_team_rows:
+        team_id = _safe_int(row.get("team_id"))
+        if team_id == 0:
+            continue
+        normalized_name = _normalize_team_name(row.get("team_name"))
+        if not normalized_name:
+            canonical_team_by_name[f"id::{team_id}"] = row.copy()
+            team_id_map[team_id] = team_id
+            continue
+        existing = canonical_team_by_name.get(normalized_name)
+        if existing is None or _team_row_priority(row) >= _team_row_priority(existing):
+            canonical_team = row.copy()
+            if existing is not None:
+                team_id_map[_safe_int(existing.get("team_id"))] = team_id
+            canonical_team_by_name[normalized_name] = canonical_team
+        else:
+            canonical_team = existing
+        team_id_map[team_id] = _safe_int(canonical_team.get("team_id"))
+
+    merged["dim_team"] = list(canonical_team_by_name.values())
+
+    def remap_team_id(value: Any) -> Any:
+        team_id = _safe_int(value)
+        return team_id_map.get(team_id, team_id) if team_id else value
+
+    dedupe_keys = {
+        "dim_date": "date_id",
+        "dim_competition": "competition_id",
+        "dim_player": "player_id",
+        "fact_match": "match_id",
+    }
+    tuple_keys = {
+        "fact_player_match_stats": ("match_id", "player_id"),
+        "fact_standings_snapshot": ("competition_id", "season", "matchday", "team_id"),
+    }
+
+    for table_name, key_name in dedupe_keys.items():
+        deduped: dict[Any, Record] = {}
+        for dataset in datasets:
+            for row in dataset.get(table_name, []):
+                record = row.copy()
+                if "team_id" in record:
+                    record["team_id"] = remap_team_id(record.get("team_id"))
+                if "home_team_id" in record:
+                    record["home_team_id"] = remap_team_id(record.get("home_team_id"))
+                if "away_team_id" in record:
+                    record["away_team_id"] = remap_team_id(record.get("away_team_id"))
+                deduped[record[key_name]] = record
+        merged[table_name] = list(deduped.values())
+
+    for table_name, key_names in tuple_keys.items():
+        deduped: dict[tuple[Any, ...], Record] = {}
+        for dataset in datasets:
+            for row in dataset.get(table_name, []):
+                record = row.copy()
+                if "team_id" in record:
+                    record["team_id"] = remap_team_id(record.get("team_id"))
+                if "home_team_id" in record:
+                    record["home_team_id"] = remap_team_id(record.get("home_team_id"))
+                if "away_team_id" in record:
+                    record["away_team_id"] = remap_team_id(record.get("away_team_id"))
+                deduped[tuple(record[key] for key in key_names)] = record
+        merged[table_name] = list(deduped.values())
+
+    return merged
+
+
 def count_loaded(transformed: TransformedData) -> int:
     return sum(len(rows) for rows in transformed.values())

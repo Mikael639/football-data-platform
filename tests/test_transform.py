@@ -1,5 +1,5 @@
 from src.extract import extract_from_mock
-from src.transform import transform, transform_football_data
+from src.transform import merge_transformed_data, transform, transform_football_data
 
 
 def test_transform_shapes():
@@ -139,3 +139,64 @@ def test_standings_transform_shape():
     assert all(row["season"] == 2025 for row in standings_rows)
     assert all(row["matchday"] == 26 for row in standings_rows)
     assert all(row["snapshot_ts"] is not None for row in standings_rows)
+
+
+def test_merge_transformed_data_prefers_richer_team_rows_and_combines_matches():
+    csv_transformed = {
+        "dim_date": [{"date_id": "2024-08-18", "year": 2024, "month": 8, "day": 18}],
+        "dim_team": [{"team_id": 101, "team_name": "Real Madrid", "country": "Spain", "crest_url": None, "short_name": None}],
+        "dim_competition": [{"competition_id": 2014, "competition_name": "La Liga", "country": "Spain"}],
+        "dim_player": [],
+        "fact_match": [
+            {
+                "match_id": 1,
+                "date_id": "2024-08-18",
+                "competition_id": 2014,
+                "home_team_id": 101,
+                "away_team_id": 202,
+                "status": "FINISHED",
+                "matchday": 1,
+                "kickoff_utc": None,
+                "season": "2024-2025",
+                "home_score": 2,
+                "away_score": 0,
+            }
+        ],
+        "fact_player_match_stats": [],
+        "fact_standings_snapshot": [],
+    }
+    api_transformed = {
+        "dim_date": [{"date_id": "2025-08-17", "year": 2025, "month": 8, "day": 17}],
+        "dim_team": [
+            {"team_id": 86, "team_name": "Real Madrid", "country": "Spain", "crest_url": "crest.png", "short_name": "Real Madrid"},
+            {"team_id": 81, "team_name": "Barcelona", "country": "Spain", "crest_url": "barca.png", "short_name": "Barca"},
+        ],
+        "dim_competition": [{"competition_id": 2014, "competition_name": "Primera Division", "country": "Spain"}],
+        "dim_player": [],
+        "fact_match": [
+            {
+                "match_id": 2,
+                "date_id": "2025-08-17",
+                "competition_id": 2014,
+                "home_team_id": 86,
+                "away_team_id": 81,
+                "status": "SCHEDULED",
+                "matchday": 1,
+                "kickoff_utc": None,
+                "season": "2025-2026",
+                "home_score": None,
+                "away_score": None,
+            }
+        ],
+        "fact_player_match_stats": [],
+        "fact_standings_snapshot": [],
+    }
+
+    merged = merge_transformed_data(csv_transformed, api_transformed)
+
+    real_madrid = next(team for team in merged["dim_team"] if team["team_name"] == "Real Madrid")
+    assert real_madrid["team_id"] == 86
+    assert real_madrid["crest_url"] == "crest.png"
+    assert len(merged["fact_match"]) == 2
+    csv_match = next(match for match in merged["fact_match"] if match["match_id"] == 1)
+    assert csv_match["home_team_id"] == 86

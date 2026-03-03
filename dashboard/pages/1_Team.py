@@ -3,6 +3,7 @@ import streamlit as st
 
 from data.dashboard_data import (
     build_perspective_table,
+    describe_season_source,
     get_home_away_split,
     get_kpis,
     get_matches,
@@ -53,6 +54,7 @@ def main() -> None:
     inject_dashboard_styles()
     st.title("Team")
     filters = render_global_filters("team")
+    st.caption(describe_season_source(filters.season))
     filters = require_team_selection(filters)
     if filters is None:
         return

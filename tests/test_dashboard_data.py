@@ -15,6 +15,7 @@ from dashboard.data.dashboard_data import (
     build_perspective_table,
     build_team_match_view,
     compute_team_kpis,
+    describe_season_source,
     get_current_standings,
 )
 
@@ -188,3 +189,8 @@ def test_dashboard_overview_uses_snapshot(monkeypatch):
     assert "fact_standings_snapshot" in str(captured["query"])
     assert captured["params"]["season_start"] == 2020
     assert len(standings) == 1
+
+
+def test_describe_season_source_distinguishes_current_and_historical_seasons():
+    assert "football-data.org" in describe_season_source("2025-2026")
+    assert "historique CSV" in describe_season_source("2024-2025")

@@ -30,6 +30,13 @@ def extract_from_mock() -> dict[str, Any]:
 
 
 def count_extracted(payload: dict[str, Any]) -> int:
+    if "csv_payload" in payload or "api_payload" in payload:
+        total = 0
+        if "csv_payload" in payload:
+            total += count_extracted(payload["csv_payload"])
+        if "api_payload" in payload:
+            total += count_extracted(payload["api_payload"])
+        return total
     # Mock payload
     if "fixtures" in payload:
         return len(payload.get("fixtures", []))

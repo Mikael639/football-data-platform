@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from data.dashboard_data import get_current_standings, get_kpis, get_recent_matches, get_standings_curve
+from data.dashboard_data import describe_season_source, get_current_standings, get_kpis, get_recent_matches, get_standings_curve
 from state.filters import render_global_filters
 from ui.charts import render_position_curve
 from ui.styles import inject_dashboard_styles
@@ -29,6 +29,7 @@ def main() -> None:
     inject_dashboard_styles()
     st.title("Overview")
     filters = render_global_filters("overview")
+    st.caption(describe_season_source(filters.season))
 
     kpis = get_kpis(
         competition_id=filters.competition_id,
