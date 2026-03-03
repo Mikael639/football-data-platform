@@ -537,7 +537,10 @@ def get_teams(competition_id: int | None = None, season: str | None = None) -> p
 
 
 def get_team_alias_ids(team_id: int, competition_id: int | None = None, season: str | None = None) -> list[int]:
-    groups = get_team_alias_groups(competition_id, season)
+    try:
+        groups = get_team_alias_groups(competition_id, season)
+    except Exception:
+        return [int(team_id)]
     if groups.empty:
         return [int(team_id)]
     matched = groups[groups["team_id"].astype(int) == int(team_id)]
