@@ -256,7 +256,10 @@ def build_match_where_clause(filters: DashboardFilters) -> tuple[str, dict[str, 
     elif fact_match_has_non_null_seasons(filters.competition_id):
         clauses.append("NULLIF(TRIM(m.season), '') IS NOT NULL")
     if filters.team_id is not None:
-        team_ids = get_team_alias_ids(filters.team_id, filters.competition_id, filters.season)
+        try:
+            team_ids = get_team_alias_ids(filters.team_id, filters.competition_id, filters.season)
+        except Exception:
+            team_ids = [int(filters.team_id)]
         in_clause = _build_sql_in_clause(team_ids, "team_id", params)
         clauses.append(f"(m.home_team_id IN ({in_clause}) OR m.away_team_id IN ({in_clause}))")
     if filters.date_start is not None:

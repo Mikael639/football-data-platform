@@ -110,6 +110,10 @@ def test_build_local_league_table_ranks_by_points_then_gd():
 def test_build_match_where_clause_includes_all_filters(monkeypatch):
     monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_season_column", lambda: True)
     monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_non_null_seasons", lambda competition_id=None: True)
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data.get_team_alias_ids",
+        lambda team_id, competition_id=None, season=None: [int(team_id)],
+    )
 
     clause, params = build_match_where_clause(
         DashboardFilters(
