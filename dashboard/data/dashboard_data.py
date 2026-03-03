@@ -79,6 +79,20 @@ def fact_match_has_season_column() -> bool:
     return not _read_sql(query).empty
 
 
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def fact_match_has_non_null_seasons(competition_id: int | None = None) -> bool:
+    if not fact_match_has_season_column():
+        return False
+    query = """
+    SELECT 1
+    FROM fact_match
+    WHERE (:competition_id IS NULL OR competition_id = :competition_id)
+      AND NULLIF(TRIM(season), '') IS NOT NULL
+    LIMIT 1
+    """
+    return not _read_sql(query, {"competition_id": competition_id}).empty
+
+
 def build_match_where_clause(filters: DashboardFilters) -> tuple[str, dict[str, Any]]:
     clauses = ["1 = 1"]
     params: dict[str, Any] = {}
@@ -89,6 +103,8 @@ def build_match_where_clause(filters: DashboardFilters) -> tuple[str, dict[str, 
     if filters.season is not None and fact_match_has_season_column():
         clauses.append("m.season = :season")
         params["season"] = str(filters.season)
+    elif fact_match_has_non_null_seasons(filters.competition_id):
+        clauses.append("NULLIF(TRIM(m.season), '') IS NOT NULL")
     if filters.team_id is not None:
         clauses.append("(m.home_team_id = :team_id OR m.away_team_id = :team_id)")
         params["team_id"] = int(filters.team_id)

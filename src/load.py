@@ -31,6 +31,34 @@ def _delete_standings_snapshot_scopes(engine: Engine, scopes: list[tuple[int, in
             )
 
 
+def cleanup_legacy_fact_rows_for_csv(engine: Engine) -> dict[str, int]:
+    with engine.begin() as conn:
+        deleted_player_stats = conn.execute(
+            text(
+                """
+                DELETE FROM fact_player_match_stats
+                WHERE match_id IN (
+                    SELECT match_id
+                    FROM fact_match
+                    WHERE season IS NULL
+                )
+                """
+            )
+        ).rowcount
+        deleted_matches = conn.execute(
+            text(
+                """
+                DELETE FROM fact_match
+                WHERE season IS NULL
+                """
+            )
+        ).rowcount
+    return {
+        "deleted_player_match_stats": int(deleted_player_stats or 0),
+        "deleted_matches": int(deleted_matches or 0),
+    }
+
+
 def _fetch_existing_team_ids(engine: Engine) -> dict[str, int]:
     with engine.begin() as conn:
         rows = conn.execute(text("SELECT team_id, team_name FROM dim_team")).mappings().all()

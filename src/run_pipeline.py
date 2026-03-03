@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from src.config import Settings, get_settings
 from src.extract import count_extracted, extract_csv, extract_football_data_laliga_all_clubs, extract_from_mock
-from src.load import load_all, load_standings_snapshot
+from src.load import cleanup_legacy_fact_rows_for_csv, load_all, load_standings_snapshot
 from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
 from src.standings import compute_standings_snapshot
 from src.transform import count_loaded, transform, transform_csv_to_tables, transform_football_data
@@ -267,6 +267,13 @@ def main() -> None:
 
         load_started = time.perf_counter()
         loaded = load_all(engine, transformed)
+        if settings.data_mode == "csv":
+            cleanup_counts = cleanup_legacy_fact_rows_for_csv(engine)
+            logger.info(
+                "Cleaned legacy match rows after csv load deleted_matches=%s deleted_player_match_stats=%s",
+                cleanup_counts["deleted_matches"],
+                cleanup_counts["deleted_player_match_stats"],
+            )
         should_compute_standings = settings.data_mode == "csv" or not transformed.get("fact_standings_snapshot")
         if should_compute_standings:
             standings_result = compute_standings_snapshot(engine, scopes=_standings_scopes_from_transformed(transformed))

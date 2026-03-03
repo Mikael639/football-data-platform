@@ -106,6 +106,7 @@ def test_build_local_league_table_ranks_by_points_then_gd():
 
 def test_build_match_where_clause_includes_all_filters(monkeypatch):
     monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_season_column", lambda: True)
+    monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_non_null_seasons", lambda competition_id=None: True)
 
     clause, params = build_match_where_clause(
         DashboardFilters(
@@ -121,6 +122,24 @@ def test_build_match_where_clause_includes_all_filters(monkeypatch):
     assert "team_id" in params
     assert params["season"] == "2025-2026"
     assert params["date_start"] == "2025-08-01"
+
+
+def test_build_match_where_clause_excludes_legacy_null_season_rows(monkeypatch):
+    monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_season_column", lambda: True)
+    monkeypatch.setattr("dashboard.data.dashboard_data.fact_match_has_non_null_seasons", lambda competition_id=None: True)
+
+    clause, params = build_match_where_clause(
+        DashboardFilters(
+            competition_id=2014,
+            season=None,
+            team_id=None,
+            date_start=None,
+            date_end=None,
+        )
+    )
+
+    assert "NULLIF(TRIM(m.season), '') IS NOT NULL" in clause
+    assert "season" not in params
 
 
 def test_build_perspective_table_creates_home_and_away_rows():

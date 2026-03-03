@@ -65,8 +65,9 @@ def render_global_filters(page_key: str) -> DashboardFilters:
 
     season_labels, season_map = _season_options(competition_id)
     season_key = f"{page_key}_season"
+    preferred_default_season = season_labels[1] if len(season_labels) > 1 else season_labels[0]
     if st.session_state.get(season_key) not in season_labels and season_labels:
-        st.session_state[season_key] = season_labels[0]
+        st.session_state[season_key] = preferred_default_season
     selected_season = st.sidebar.selectbox("Saison", season_labels, key=season_key)
     season = season_map.get(selected_season)
 
