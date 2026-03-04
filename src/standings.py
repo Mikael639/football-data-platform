@@ -12,6 +12,15 @@ from src.utils.logger import get_logger
 
 logger = get_logger("standings")
 
+EUROPEAN_COMPETITION_NAMES = {
+    "champions league",
+    "uefa champions league",
+    "europa league",
+    "uefa europa league",
+    "conference league",
+    "uefa conference league",
+}
+
 
 @dataclass(frozen=True)
 class StandingsComputationResult:
@@ -34,6 +43,28 @@ def _season_start_from_match_row(row: pd.Series) -> int | None:
     if pd.isna(parsed):
         return None
     return int(parsed.year if parsed.month >= 7 else parsed.year - 1)
+
+
+def _normalize_competition_name(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _is_european_competition(name: str) -> bool:
+    return name in EUROPEAN_COMPETITION_NAMES
+
+
+def _is_league_stage_row(is_european: bool, stage: str, matchday: float | int | None) -> bool:
+    if not is_european:
+        return True
+
+    if stage in {"LEAGUE_STAGE", "GROUP_STAGE"}:
+        return True
+    if stage.startswith("LAST_") or stage in {"QUARTER_FINALS", "SEMI_FINALS", "FINAL", "THIRD_PLACE", "PLAYOFFS"}:
+        return False
+
+    if stage == "" and matchday is not None and not pd.isna(matchday):
+        return int(matchday) <= 8
+    return False
 
 
 def _build_team_result_rows(matches_df: pd.DataFrame) -> pd.DataFrame:
@@ -92,12 +123,32 @@ def build_standings_rows(matches_df: pd.DataFrame) -> StandingsComputationResult
     working["away_score"] = pd.to_numeric(working["away_score"], errors="coerce")
     working["kickoff_utc"] = pd.to_datetime(working["kickoff_utc"], errors="coerce", utc=True)
     working["match_date"] = pd.to_datetime(working["match_date"], errors="coerce")
+    working["competition_name_norm"] = (
+        working["competition_name"].map(_normalize_competition_name)
+        if "competition_name" in working.columns
+        else ""
+    )
+    working["stage_norm"] = (
+        working["stage"].fillna("").astype(str).str.strip().str.upper()
+        if "stage" in working.columns
+        else ""
+    )
+    working["is_european_competition"] = working["competition_name_norm"].map(_is_european_competition)
+    working["is_league_stage_row"] = working.apply(
+        lambda row: _is_league_stage_row(
+            bool(row.get("is_european_competition")),
+            str(row.get("stage_norm") or ""),
+            row.get("matchday"),
+        ),
+        axis=1,
+    )
 
     finished = working[
         working["status"].fillna("").eq("FINISHED")
         & working["home_score"].notna()
         & working["away_score"].notna()
         & working["season_start"].notna()
+        & working["is_league_stage_row"]
     ].copy()
 
     if finished.empty:
@@ -232,11 +283,13 @@ def load_matches_for_standings(
     SELECT
       m.match_id,
       m.competition_id,
+      c.competition_name,
       m.season,
       COALESCE((m.kickoff_utc AT TIME ZONE 'UTC')::date, m.date_id) AS match_date,
       m.kickoff_utc,
       m.status,
       m.matchday,
+      m.stage,
       m.home_team_id,
       ht.team_name AS home_team_name,
       m.away_team_id,
@@ -246,10 +299,42 @@ def load_matches_for_standings(
     FROM fact_match m
     JOIN dim_team ht ON ht.team_id = m.home_team_id
     JOIN dim_team at ON at.team_id = m.away_team_id
+    LEFT JOIN dim_competition c ON c.competition_id = m.competition_id
     WHERE {' AND '.join(conditions)}
     ORDER BY m.competition_id, m.season, m.matchday NULLS LAST, match_date, m.match_id
     """
-    return pd.read_sql(text(query), engine, params=params)
+    try:
+        return pd.read_sql(text(query), engine, params=params)
+    except Exception as exc:
+        message = str(exc).lower()
+        if "column m.stage does not exist" not in message:
+            raise
+        logger.warning("fact_match.stage is unavailable; standings fallback will include all finished matches.")
+        fallback_query = f"""
+        SELECT
+          m.match_id,
+          m.competition_id,
+          c.competition_name,
+          m.season,
+          COALESCE((m.kickoff_utc AT TIME ZONE 'UTC')::date, m.date_id) AS match_date,
+          m.kickoff_utc,
+          m.status,
+          m.matchday,
+          '' AS stage,
+          m.home_team_id,
+          ht.team_name AS home_team_name,
+          m.away_team_id,
+          at.team_name AS away_team_name,
+          m.home_score,
+          m.away_score
+        FROM fact_match m
+        JOIN dim_team ht ON ht.team_id = m.home_team_id
+        JOIN dim_team at ON at.team_id = m.away_team_id
+        LEFT JOIN dim_competition c ON c.competition_id = m.competition_id
+        WHERE {' AND '.join(conditions)}
+        ORDER BY m.competition_id, m.season, m.matchday NULLS LAST, match_date, m.match_id
+        """
+        return pd.read_sql(text(fallback_query), engine, params=params)
 
 
 def compute_standings_snapshot(

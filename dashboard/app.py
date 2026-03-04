@@ -60,8 +60,8 @@ def _render_summary_cards(competitions: pd.DataFrame, runs: pd.DataFrame) -> Non
           </div>
           <div class="fdp-home-summary-card">
             <div class="fdp-home-summary-kicker">Pages</div>
-            <div class="fdp-signal-value">5</div>
-            <div class="fdp-signal-sub">Overview, Team, Players, Live Leagues et Monitoring.</div>
+            <div class="fdp-signal-value">6</div>
+            <div class="fdp-signal-sub">Overview, Team, Players, Live Leagues, Europe et Monitoring.</div>
           </div>
           <div class="fdp-home-summary-card">
             <div class="fdp-home-summary-kicker">Latest Status</div>
@@ -74,9 +74,16 @@ def _render_summary_cards(competitions: pd.DataFrame, runs: pd.DataFrame) -> Non
     )
 
 
-def _render_page_tile(column: st.delta_generator.DeltaGenerator, title: str, description: str, chips: list[str], target: str, image_name: str) -> None:
+def _render_page_tile(
+    column: st.delta_generator.DeltaGenerator,
+    title: str,
+    description: str,
+    chips: list[str],
+    target: str,
+    image_name: str | None,
+) -> None:
     with column:
-        image_path = asset_image_path(image_name)
+        image_path = asset_image_path(image_name) if image_name else None
         chips_html = "".join(f"<span class='fdp-chip'>{chip}</span>" for chip in chips)
         st.markdown("<div class='fdp-page-tile'>", unsafe_allow_html=True)
         if image_path:
@@ -101,9 +108,10 @@ def _render_page_cards() -> None:
     _render_page_tile(top[1], "TEAM", "Lecture club par club avec forme recente, splits domicile/exterieur et trajectoire au classement.", ["Forme", "Equipe", "Focus club"], "pages/1_TEAM.py", "Team.png")
     _render_page_tile(top[2], "LIVE LEAGUES", "Comparateur multi-ligues pour lire la table courante de chaque championnat disponible en base.", ["Multi-leagues", "Zones UEFA", "Live snapshot"], "pages/3_LIVE_LEAGUES.py", "Live Leagues.png")
 
-    bottom = st.columns(2)
+    bottom = st.columns(3)
     _render_page_tile(bottom[0], "PLAYERS", "Effectif disponible en base avec les postes, nationalites et informations principales du club filtre.", ["Effectif", "Squad view", "Exploration"], "pages/2_PLAYERS.py", "Players.png")
-    _render_page_tile(bottom[1], "MONITORING", "Sante de la plateforme: runs, qualite de donnees et indicateurs de fraicheur.", ["Runs", "DQ", "Observability"], "pages/4_MONITORING.py", "Monitoring.png")
+    _render_page_tile(bottom[1], "EUROPE", "Suivi UEFA dedie pour la Champions League, l Europa League et la Conference League.", ["UEFA", "Stages", "Fixtures"], "pages/6_EUROPE.py", None)
+    _render_page_tile(bottom[2], "MONITORING", "Sante de la plateforme: runs, qualite de donnees et indicateurs de fraicheur.", ["Runs", "DQ", "Observability"], "pages/4_MONITORING.py", "Monitoring.png")
 
 
 def main() -> None:

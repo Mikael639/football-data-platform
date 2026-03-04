@@ -55,6 +55,8 @@ CREATE TABLE fact_match (
     away_team_id INT REFERENCES dim_team(team_id),
     status TEXT,
     matchday INT,
+    stage TEXT,
+    group_name TEXT,
     kickoff_utc TIMESTAMPTZ,
     season TEXT,
     home_score INT,

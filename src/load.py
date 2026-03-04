@@ -173,6 +173,8 @@ def load_all(engine: Engine, data: dict[str, Any]) -> int:
     for row in data["fact_match"]:
         row.setdefault("status", None)
         row.setdefault("matchday", None)
+        row.setdefault("stage", None)
+        row.setdefault("group_name", None)
         row.setdefault("kickoff_utc", None)
         row.setdefault("season", None)
 
@@ -187,6 +189,8 @@ def load_all(engine: Engine, data: dict[str, Any]) -> int:
             away_team_id,
             status,
             matchday,
+            stage,
+            group_name,
             kickoff_utc,
             season,
             home_score,
@@ -200,6 +204,8 @@ def load_all(engine: Engine, data: dict[str, Any]) -> int:
             :away_team_id,
             :status,
             :matchday,
+            :stage,
+            :group_name,
             :kickoff_utc,
             :season,
             :home_score,
@@ -212,6 +218,8 @@ def load_all(engine: Engine, data: dict[str, Any]) -> int:
             away_team_id = EXCLUDED.away_team_id,
             status = EXCLUDED.status,
             matchday = EXCLUDED.matchday,
+            stage = EXCLUDED.stage,
+            group_name = EXCLUDED.group_name,
             kickoff_utc = EXCLUDED.kickoff_utc,
             season = EXCLUDED.season,
             home_score = EXCLUDED.home_score,

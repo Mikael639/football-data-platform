@@ -127,3 +127,53 @@ def test_standings_ranking_tiebreak():
 
     assert [row["team_id"] for row in md2_rows] == [4, 3, 1, 2]
     assert [row["position"] for row in md2_rows] == [1, 2, 3, 4]
+
+
+def test_standings_ignores_knockout_matches_for_european_competitions():
+    matches_df = pd.DataFrame(
+        [
+            {
+                "match_id": 1,
+                "competition_id": 2001,
+                "competition_name": "UEFA Champions League",
+                "season": "2025-2026",
+                "match_date": "2025-09-10",
+                "kickoff_utc": "2025-09-10T19:00:00Z",
+                "status": "FINISHED",
+                "matchday": 1,
+                "stage": "LEAGUE_STAGE",
+                "home_team_id": 1,
+                "home_team_name": "Alpha",
+                "away_team_id": 2,
+                "away_team_name": "Beta",
+                "home_score": 2,
+                "away_score": 0,
+            },
+            {
+                "match_id": 2,
+                "competition_id": 2001,
+                "competition_name": "UEFA Champions League",
+                "season": "2025-2026",
+                "match_date": "2026-03-10",
+                "kickoff_utc": "2026-03-10T20:00:00Z",
+                "status": "FINISHED",
+                "matchday": 1,
+                "stage": "LAST_16",
+                "home_team_id": 1,
+                "home_team_name": "Alpha",
+                "away_team_id": 2,
+                "away_team_name": "Beta",
+                "home_score": 0,
+                "away_score": 1,
+            },
+        ]
+    )
+
+    result = build_standings_rows(matches_df)
+    rows = result.rows
+
+    assert len(rows) == 2
+    alpha = next(row for row in rows if row["team_id"] == 1)
+    beta = next(row for row in rows if row["team_id"] == 2)
+    assert alpha["points"] == 3
+    assert beta["points"] == 0

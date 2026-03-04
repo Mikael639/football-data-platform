@@ -38,9 +38,15 @@ def test_settings_accepts_hybrid_mode():
 
 
 def test_settings_parses_live_competition_codes():
-    settings = Settings.from_env({"LIVE_COMPETITION_CODES": "PD, PL,SA, BL1 , FL1"})
+    settings = Settings.from_env({"LIVE_COMPETITION_CODES": "PD, PL,SA, BL1 , FL1, CL, EL, UCL"})
 
-    assert settings.live_competition_codes == ("PD", "PL", "SA", "BL1", "FL1")
+    assert settings.live_competition_codes == ("PD", "PL", "SA", "BL1", "FL1", "CL", "EL", "UCL")
+
+
+def test_settings_default_live_competition_codes_include_uefa():
+    settings = Settings.from_env({})
+
+    assert settings.live_competition_codes == ("PD", "PL", "SA", "BL1", "FL1", "CL", "EL", "UCL")
 
 
 def test_incremental_window_uses_today_minus_days_plus_one():

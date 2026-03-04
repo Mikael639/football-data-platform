@@ -1,5 +1,5 @@
 from src.extract import extract_from_mock
-from src.transform import merge_transformed_data, transform, transform_football_data
+from src.transform import merge_transformed_data, transform, transform_csv_to_tables, transform_football_data
 
 
 def test_transform_shapes():
@@ -57,6 +57,8 @@ def test_fact_match_has_new_fields():
     match_row = transformed["fact_match"][0]
     assert match_row["status"] == "FINISHED"
     assert match_row["matchday"] == 4
+    assert "stage" in match_row
+    assert "group_name" in match_row
     assert match_row["kickoff_utc"].isoformat() == "2024-09-01T19:00:00+00:00"
 
 
@@ -141,6 +143,70 @@ def test_standings_transform_shape():
     assert all(row["snapshot_ts"] is not None for row in standings_rows)
 
 
+def test_transform_football_data_keeps_stage_and_group_name():
+    payload = {
+        "season": 2025,
+        "competition_code": "CL",
+        "competition": {"id": 2001, "name": "UEFA Champions League", "area": {"name": None}},
+        "teams": [
+            {"id": 86, "name": "Real Madrid CF", "shortName": "Real Madrid", "area": {"name": "Spain"}, "crest": None},
+            {"id": 81, "name": "FC Barcelona", "shortName": "Barcelona", "area": {"name": "Spain"}, "crest": None},
+        ],
+        "squads_by_team": [],
+        "matches": [
+            {
+                "id": 9001,
+                "utcDate": "2025-10-01T19:00:00Z",
+                "status": "SCHEDULED",
+                "matchday": 2,
+                "stage": "LEAGUE_STAGE",
+                "group": "League phase",
+                "homeTeam": {"id": 86, "name": "Real Madrid CF", "shortName": "Real Madrid"},
+                "awayTeam": {"id": 81, "name": "FC Barcelona", "shortName": "Barcelona"},
+                "score": {"fullTime": {"home": None, "away": None}},
+            }
+        ],
+        "standings": {"season": {"currentMatchday": None}, "standings": []},
+        "extracted_at_utc": "2025-10-01T09:00:00Z",
+    }
+
+    transformed = transform_football_data(payload)
+
+    assert len(transformed["fact_match"]) == 1
+    match_row = transformed["fact_match"][0]
+    assert match_row["stage"] == "LEAGUE_STAGE"
+    assert match_row["group_name"] == "League phase"
+
+
+def test_transform_football_data_skips_matches_with_missing_team_ids():
+    payload = {
+        "season": 2025,
+        "competition_code": "CL",
+        "competition": {"id": 2001, "name": "UEFA Champions League", "area": {"name": None}},
+        "teams": [],
+        "squads_by_team": [],
+        "matches": [
+            {
+                "id": 9002,
+                "utcDate": "2025-10-02T19:00:00Z",
+                "status": "TIMED",
+                "matchday": 2,
+                "stage": "LEAGUE_STAGE",
+                "group": "League phase",
+                "homeTeam": {"id": None, "name": "TBD"},
+                "awayTeam": {"id": 81, "name": "FC Barcelona", "shortName": "Barcelona"},
+                "score": {"fullTime": {"home": None, "away": None}},
+            }
+        ],
+        "standings": {"season": {"currentMatchday": None}, "standings": []},
+        "extracted_at_utc": "2025-10-01T09:00:00Z",
+    }
+
+    transformed = transform_football_data(payload)
+
+    assert transformed["fact_match"] == []
+
+
 def test_merge_transformed_data_prefers_richer_team_rows_and_combines_matches():
     csv_transformed = {
         "dim_date": [{"date_id": "2024-08-18", "year": 2024, "month": 8, "day": 18}],
@@ -200,3 +266,76 @@ def test_merge_transformed_data_prefers_richer_team_rows_and_combines_matches():
     assert len(merged["fact_match"]) == 2
     csv_match = next(match for match in merged["fact_match"] if match["match_id"] == 1)
     assert csv_match["home_team_id"] == 86
+
+
+def test_transform_csv_to_tables_builds_players_and_player_match_stats(tmp_path):
+    payload = {
+        "competition_code": "PD",
+        "competition": {"id": 2014, "name": "La Liga", "area": {"name": "Spain"}},
+        "teams": [
+            {"id": 86, "name": "Real Madrid", "shortName": "Real Madrid", "area": {"name": "Spain"}, "crest": None},
+            {"id": 92, "name": "Real Sociedad", "shortName": "Real Sociedad", "area": {"name": "Spain"}, "crest": None},
+        ],
+        "match_candidates": [
+            {
+                "match_id": 1001,
+                "date_id": "2020-09-20",
+                "home_team_id": 92,
+                "away_team_id": 86,
+                "status": "FINISHED",
+                "matchday": 2,
+                "kickoff_utc": "2020-09-20T12:00:00Z",
+                "season": "2020-2021",
+                "home_score": 0,
+                "away_score": 0,
+            },
+            {
+                "match_id": 1002,
+                "date_id": "2020-09-30",
+                "home_team_id": 86,
+                "away_team_id": 99,
+                "status": "FINISHED",
+                "matchday": 4,
+                "kickoff_utc": "2020-09-30T12:00:00Z",
+                "season": "2020-2021",
+                "home_score": 1,
+                "away_score": 0,
+            },
+        ],
+        "player_match_candidates": [
+            {
+                "match_id": 1001,
+                "player_id": 9,
+                "player_name": "Karim Benzema",
+                "position": "FW",
+                "minutes": 90,
+                "goals": 0,
+                "assists": 0,
+                "shots": 2,
+                "passes": 20,
+                "pass_accuracy": 0.84,
+                "team_id": 86,
+            },
+            {
+                "match_id": 1002,
+                "player_id": 9,
+                "player_name": "Karim Benzema",
+                "position": "FW",
+                "minutes": 90,
+                "goals": 1,
+                "assists": 0,
+                "shots": 4,
+                "passes": 23,
+                "pass_accuracy": 0.88,
+                "team_id": 86,
+            },
+        ],
+    }
+    transformed = transform_csv_to_tables(payload)
+
+    assert len(transformed["dim_player"]) == 1
+    assert len(transformed["fact_player_match_stats"]) == 2
+    player_row = transformed["dim_player"][0]
+    assert player_row["full_name"] == "Karim Benzema"
+    assert player_row["team_id"] != 0
+    assert all(row["minutes"] > 0 for row in transformed["fact_player_match_stats"])

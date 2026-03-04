@@ -58,6 +58,16 @@ def _freshness_label(value: Any) -> str:
     return f"Updated {days}d ago"
 
 
+def _is_recent_started(run: pd.Series, max_hours: int = 2) -> bool:
+    if str(run.get("status")) != "STARTED":
+        return False
+    timestamp = pd.to_datetime(run.get("started_at"), errors="coerce", utc=True)
+    if pd.isna(timestamp):
+        return False
+    age = datetime.now(timezone.utc) - timestamp.to_pydatetime()
+    return age.total_seconds() <= max_hours * 3600
+
+
 def _health_summary(runs: pd.DataFrame, dq_checks: pd.DataFrame) -> dict[str, Any]:
     latest_run = runs.iloc[0]
     latest_status = str(latest_run["status"])
@@ -116,17 +126,12 @@ def _render_summary_metrics(summary: dict[str, Any]) -> None:
         ("DQ warnings", str(summary["warn_count"]), "Non-blocking quality alerts"),
         ("Rows loaded", str(int(latest_run["loaded_count"]) if pd.notna(latest_run["loaded_count"]) else 0), "All rows written during latest run"),
     ]
-    html = "".join(
-        f"""
-        <div class="fdp-signal-card">
-          <div class="fdp-signal-label">{label}</div>
-          <div class="fdp-signal-value">{value}</div>
-          <div class="fdp-signal-sub">{subtext}</div>
-        </div>
-        """
-        for label, value, subtext in cards
-    )
-    st.markdown(f"<div class='fdp-signal-grid'>{html}</div>", unsafe_allow_html=True)
+    for start in range(0, len(cards), 4):
+        cols = st.columns(4)
+        for col, (label, value, subtext) in zip(cols, cards[start : start + 4]):
+            with col:
+                st.metric(label, value)
+                st.caption(subtext)
 
 
 def _render_simple_explanation(summary: dict[str, Any]) -> None:
@@ -162,26 +167,43 @@ def _render_alerts(dq_checks: pd.DataFrame) -> None:
 
 def _render_recent_runs_gallery(runs: pd.DataFrame) -> None:
     render_section_heading("Recent Runs")
-    recent_runs = runs.head(6).copy()
-    cards: list[str] = []
-    for _, run in recent_runs.iterrows():
-        cards.append(
-            f"""
-            <div class="fdp-run-card">
-              <div class="fdp-run-top">
-                <div class="fdp-run-id">{str(run["run_id"])[:8]}</div>
-                {render_badge(str(run["status"]))}
-              </div>
-              <div class="fdp-run-meta">
-                <div><strong>Started:</strong> {_format_timestamp(run["started_at"])}</div>
-                <div><strong>Duration:</strong> {_format_duration_ms(run["duration_ms"])}</div>
-                <div><strong>Loaded:</strong> {int(run["loaded_count"]) if pd.notna(run["loaded_count"]) else 0} rows</div>
-                <div><strong>Extracted:</strong> {int(run["extracted_count"]) if pd.notna(run["extracted_count"]) else 0} rows</div>
-              </div>
-            </div>
-            """
-        )
-    st.markdown(f"<div class='fdp-run-list'>{''.join(cards)}</div>", unsafe_allow_html=True)
+    successful_runs = runs[runs["status"].astype(str) == "SUCCESS"].head(3).copy()
+    issue_runs = runs[runs["status"].astype(str) == "FAILED"].head(2).copy()
+    active_runs = runs[runs.apply(_is_recent_started, axis=1)].head(1).copy()
+
+    render_section_heading("Successful Updates")
+    if successful_runs.empty:
+        st.info("No successful update available yet.")
+    else:
+        success_labels = ["Latest update", "Previous update", "Earlier update"]
+        cols = st.columns(len(successful_runs))
+        for col, (_, run), label in zip(cols, successful_runs.iterrows(), success_labels):
+            with col:
+                with st.container(border=True):
+                    st.markdown(f"**{label}**")
+                    st.markdown(render_badge("SUCCESS"), unsafe_allow_html=True)
+                    st.caption(f"Started: {_format_timestamp(run['started_at'])}")
+                    st.caption(f"Duration: {_format_duration_ms(run['duration_ms'])}")
+                    st.caption(f"Loaded: {int(run['loaded_count']) if pd.notna(run['loaded_count']) else 0} rows")
+                    st.caption(f"Extracted: {int(run['extracted_count']) if pd.notna(run['extracted_count']) else 0} rows")
+                    st.caption(f"Technical id: {str(run['run_id'])[:8]}")
+
+    if not issue_runs.empty or not active_runs.empty:
+        render_section_heading("Recent Issues")
+        issue_cards = pd.concat([active_runs, issue_runs], ignore_index=True)
+        cols = st.columns(len(issue_cards))
+        for col, (_, run) in zip(cols, issue_cards.iterrows()):
+            with col:
+                with st.container(border=True):
+                    status = str(run["status"])
+                    title = "Run in progress" if status == "STARTED" else "Recent failure"
+                    st.markdown(f"**{title}**")
+                    st.markdown(render_badge(status), unsafe_allow_html=True)
+                    st.caption(f"Started: {_format_timestamp(run['started_at'])}")
+                    st.caption(f"Duration: {_format_duration_ms(run['duration_ms'])}")
+                    st.caption(f"Loaded: {int(run['loaded_count']) if pd.notna(run['loaded_count']) else 0} rows")
+                    st.caption(f"Extracted: {int(run['extracted_count']) if pd.notna(run['extracted_count']) else 0} rows")
+                    st.caption(f"Technical id: {str(run['run_id'])[:8]}")
 
 
 def _render_run_details(runs: pd.DataFrame) -> str:
@@ -214,6 +236,50 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
     with cols[3]:
         render_status_badge(str(selected["status"]))
 
+    render_section_heading("Run Summary", "Readable snapshot of the selected execution.")
+    metrics = selected.get("metrics", {}) or {}
+    volumes = selected.get("volumes", {}) or {}
+
+    summary_cols = st.columns(4)
+    summary_cols[0].metric("Status", str(selected["status"]))
+    summary_cols[1].metric("Extracted", int(selected["extracted_count"]) if pd.notna(selected["extracted_count"]) else 0)
+    summary_cols[2].metric("Loaded", int(selected["loaded_count"]) if pd.notna(selected["loaded_count"]) else 0)
+    summary_cols[3].metric("Last update", _freshness_label(selected["started_at"]))
+
+    timing_cols = st.columns(5)
+    timing_cols[0].metric("Extract", _format_duration_ms(metrics.get("extract_ms")))
+    timing_cols[1].metric("Transform", _format_duration_ms(metrics.get("transform_ms")))
+    timing_cols[2].metric("Load", _format_duration_ms(metrics.get("load_ms")))
+    timing_cols[3].metric("DQ", _format_duration_ms(metrics.get("dq_ms")))
+    timing_cols[4].metric("Total", _format_duration_ms(metrics.get("total_duration_ms")))
+
+    timing_values = {
+        "Extract": int(metrics.get("extract_ms") or 0),
+        "Transform": int(metrics.get("transform_ms") or 0),
+        "Load": int(metrics.get("load_ms") or 0),
+        "DQ": int(metrics.get("dq_ms") or 0),
+    }
+    total_timing = sum(timing_values.values()) or 1
+    render_section_heading("Timing Breakdown")
+    timing_df = pd.DataFrame(
+        {
+            "Step": list(timing_values.keys()),
+            "Duration (ms)": list(timing_values.values()),
+        }
+    )
+    timing_df["Share"] = timing_df["Duration (ms)"] / total_timing
+    st.bar_chart(timing_df.set_index("Step")["Duration (ms)"], use_container_width=True)
+
+    volume_cols = st.columns(4)
+    volume_cols[0].metric("Teams", int(volumes.get("rows_dim_team", 0)))
+    volume_cols[1].metric("Players", int(volumes.get("rows_dim_player", 0)))
+    volume_cols[2].metric("Matches", int(volumes.get("rows_fact_match", 0)))
+    volume_cols[3].metric("Standings", int(volumes.get("rows_fact_standings_snapshot", 0)))
+
+    error_message = str(selected.get("error_message") or "").strip()
+    if error_message:
+        st.error(error_message)
+
     dq_checks = get_dq_checks(run_id=run_id, limit=100)
     render_section_heading("Data Quality Checks", "Checks persisted for the selected pipeline run.")
     if dq_checks.empty:
@@ -224,6 +290,20 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
     dq_display["created_at"] = dq_display["created_at"].map(_format_timestamp)
     dq_display["metric_value"] = dq_display["metric_value"].round(2)
     dq_display["threshold"] = dq_display["threshold"].round(2)
+    dq_display["priority"] = dq_display["status"].map({"FAIL": 0, "WARN": 1, "PASS": 2}).fillna(3)
+    dq_display = dq_display.sort_values(["priority", "created_at"], ascending=[True, False])
+
+    headline_alerts = dq_display[dq_display["status"].isin(["FAIL", "WARN"])].head(5)
+    if not headline_alerts.empty:
+        st.warning("Priority checks need attention before trusting all dashboard views.")
+        st.dataframe(
+            style_monitoring_table(
+                headline_alerts[["created_at", "check_name", "status", "severity", "metric_value", "threshold", "details"]]
+            ),
+            hide_index=True,
+            use_container_width=True,
+        )
+
     st.dataframe(
         style_monitoring_table(
             dq_display[["created_at", "check_name", "status", "severity", "metric_value", "threshold", "details"]]
@@ -231,6 +311,10 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
         hide_index=True,
         use_container_width=True,
     )
+
+    with st.expander("Raw technical payload"):
+        st.code(_format_json(metrics), language="json")
+        st.code(_format_json(volumes), language="json")
 
 
 def main() -> None:

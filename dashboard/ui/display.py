@@ -27,8 +27,8 @@ def asset_image_path(filename: str) -> str | None:
     return str(image_path)
 
 
-def render_page_banner(title: str, subtitle: str, image_name: str) -> None:
-    image_path = asset_image_path(image_name)
+def render_page_banner(title: str, subtitle: str, image_name: str | None = None, image_width: int = 180) -> None:
+    image_path = asset_image_path(image_name) if image_name else None
     left, right = st.columns([5, 1], vertical_alignment="center")
     with left:
         st.markdown(
@@ -43,7 +43,7 @@ def render_page_banner(title: str, subtitle: str, image_name: str) -> None:
         )
     with right:
         if image_path:
-            st.image(image_path, width=140)
+            st.image(image_path, width=image_width)
 
 
 def render_section_heading(title: str, subtitle: str | None = None) -> None:

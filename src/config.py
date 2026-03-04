@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal, Mapping
 
+DEFAULT_LIVE_COMPETITION_CODES = ("PD", "PL", "SA", "BL1", "FL1", "CL", "EL", "UCL")
+
 
 class SettingsError(ValueError):
     pass
@@ -56,7 +58,7 @@ def _parse_int(value: str | None, *, field_name: str, default: int) -> int:
 
 def _parse_competition_codes(value: str | None, *, default_code: str) -> tuple[str, ...]:
     if value is None or not value.strip():
-        return ("PD", "PL", "SA", "BL1", "FL1")
+        return DEFAULT_LIVE_COMPETITION_CODES
     codes = tuple(code.strip().upper() for code in value.split(",") if code.strip())
     return codes or (default_code.upper(),)
 
@@ -72,7 +74,7 @@ class Settings:
     football_data_token: str | None = None
     football_data_base_url: str = "https://api.football-data.org/v4"
     competition_code: str = "PD"
-    live_competition_codes: tuple[str, ...] = ("PD", "PL", "SA", "BL1", "FL1")
+    live_competition_codes: tuple[str, ...] = DEFAULT_LIVE_COMPETITION_CODES
     data_mode: Literal["mock", "api", "csv", "hybrid"] = "api"
     incremental: bool = False
     incremental_days: int = 14

@@ -62,6 +62,13 @@ def _find_cleaned_header_row(path: Path) -> int:
     )
 
 
+def _player_name_from_filename(path: Path) -> str:
+    stem = path.stem
+    stem = re.sub(r"_cleaned$", "", stem, flags=re.IGNORECASE)
+    stem = stem.replace("Vinicius_stat", "Vinicius Junior")
+    return stem.replace("_", " ").strip()
+
+
 def _normalize_team_name(value: Any) -> str:
     if value is None:
         return ""
@@ -156,7 +163,93 @@ def _load_cleaned_matchlog(path: Path) -> pd.DataFrame:
     frame = frame.copy()
     frame["__source_file"] = path.name
     frame["__season_hint"] = _season_label_from_filename(path)
+    player_fallback = _player_name_from_filename(path)
+    if "Player" in frame.columns:
+        player_series = frame["Player"].fillna("").astype(str).str.strip()
+        frame["__player_name"] = player_series.where(player_series != "", player_fallback)
+    else:
+        frame["__player_name"] = player_fallback
     return frame
+
+
+def _parse_starting_flag(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return text in {"y", "yes", "true", "1", "starter", "start"}
+
+
+def _parse_pass_accuracy(value: Any) -> float:
+    text = str(value or "").strip().replace("%", "")
+    if not text:
+        return 0.0
+    try:
+        parsed = float(text)
+    except ValueError:
+        return 0.0
+    if parsed > 1:
+        parsed = parsed / 100.0
+    return max(0.0, min(parsed, 1.0))
+
+
+def _safe_int(value: Any) -> int:
+    parsed = pd.to_numeric(value, errors="coerce")
+    if pd.isna(parsed):
+        return 0
+    return int(parsed)
+
+
+def _build_player_match_candidates(raw: pd.DataFrame, team_id_map: dict[str, int], match_id_map: dict[str, int]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for _, row in raw.iterrows():
+        competition = _normalize_competition(row.get("Comp"))
+        if competition != "La Liga":
+            continue
+
+        squad = _normalize_team_name(row.get("Squad"))
+        opponent = _normalize_team_name(row.get("Opponent"))
+        venue = _normalize_venue(row.get("Venue"))
+        if not squad or not opponent or venue not in {"Home", "Away"}:
+            continue
+
+        match_date = pd.to_datetime(row.get("Date"), errors="coerce")
+        if pd.isna(match_date):
+            continue
+        date_id = match_date.date().isoformat()
+        season = row.get("__season_hint") or _season_label_from_date(match_date.date())
+        home_team = squad if venue == "Home" else opponent
+        away_team = opponent if venue == "Home" else squad
+        match_key = "|".join([season, competition, date_id, home_team, away_team])
+        match_id = match_id_map.get(match_key)
+        if match_id is None:
+            continue
+
+        player_name = " ".join(str(row.get("__player_name") or "").strip().split())
+        if not player_name:
+            continue
+
+        player_key = re.sub(r"[^a-z0-9]+", "_", player_name.casefold()).strip("_")
+        rows.append(
+            {
+                "match_id": int(match_id),
+                "player_id": _stable_int_id(f"player::{player_key}"),
+                "player_name": player_name,
+                "position": str(row.get("Pos") or "").strip() or None,
+                "is_starting": _parse_starting_flag(row.get("Start")),
+                "minutes": _safe_int(row.get("Min")),
+                "goals": _safe_int(row.get("Gls")),
+                "assists": _safe_int(row.get("Ast")),
+                "shots": _safe_int(row.get("Sh")),
+                "passes": _safe_int(row.get("Cmp")),
+                "pass_accuracy": _parse_pass_accuracy(row.get("Cmp%")),
+                "team_id": int(team_id_map[squad]),
+                "team_name": squad,
+                "season": season,
+            }
+        )
+
+    deduped: dict[tuple[int, int], dict[str, Any]] = {}
+    for row in rows:
+        deduped[(int(row["match_id"]), int(row["player_id"]))] = row
+    return list(deduped.values())
 
 
 def _build_side_match_candidates(raw: pd.DataFrame) -> pd.DataFrame:
@@ -305,9 +398,12 @@ def extract_csv(
     ]
     team_id_map = {team["name"]: team["id"] for team in team_rows}
     match_candidates = _dedupe_match_candidates(side_candidates, resolved_settings.competition_code)
+    match_id_map: dict[str, int] = {}
     for match in match_candidates:
         match["home_team_id"] = team_id_map[match["home_team"]]
         match["away_team_id"] = team_id_map[match["away_team"]]
+        match_id_map["|".join([match["season"], match["competition"], match["date_id"], match["home_team"], match["away_team"]])] = int(match["match_id"])
+    player_match_candidates = _build_player_match_candidates(merged, team_id_map, match_id_map)
     competition_name = "La Liga" if resolved_settings.competition_code == "PD" else resolved_settings.competition_code
 
     return {
@@ -320,6 +416,7 @@ def extract_csv(
         },
         "extracted_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "match_candidates": match_candidates,
+        "player_match_candidates": player_match_candidates,
         "teams": team_rows,
         "csv_files": [path.name for path in files],
     }
@@ -402,12 +499,24 @@ def _fetch_standings_payload(
     token: str,
     base_url: str,
 ) -> dict[str, Any]:
-    return _fd_get(
-        f"/competitions/{competition_code}/standings",
-        token,
-        base_url,
-        params={"season": season},
-    )
+    try:
+        return _fd_get(
+            f"/competitions/{competition_code}/standings",
+            token,
+            base_url,
+            params={"season": season},
+        )
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        if status_code in {400, 404}:
+            logger.info(
+                "Standings unavailable for competition=%s season=%s status=%s; continuing without snapshots.",
+                competition_code,
+                season,
+                status_code,
+            )
+            return {"season": {"currentMatchday": None}, "standings": []}
+        raise
 
 
 # -----------------------
@@ -499,10 +608,27 @@ def extract_football_data_live_competitions(
     today: date | None = None,
 ) -> list[dict[str, Any]]:
     resolved_settings = settings or get_settings()
-    return [
-        extract_football_data_competition(settings=resolved_settings, competition_code=competition_code, today=today)
-        for competition_code in resolved_settings.live_competition_codes
-    ]
+    payloads: list[dict[str, Any]] = []
+    for competition_code in resolved_settings.live_competition_codes:
+        try:
+            payloads.append(
+                extract_football_data_competition(
+                    settings=resolved_settings,
+                    competition_code=competition_code,
+                    today=today,
+                )
+            )
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            if status_code in {403, 404}:
+                logger.warning(
+                    "Skipping competition=%s because the API returned status=%s for this token/plan.",
+                    competition_code,
+                    status_code,
+                )
+                continue
+            raise
+    return payloads
 
 
 def extract_football_data_laliga_all_clubs(

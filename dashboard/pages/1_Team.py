@@ -13,6 +13,7 @@ from data.dashboard_data import (
 )
 from state.filters import render_global_filters, require_team_selection
 from ui.charts import render_form_chart, render_home_away_chart, render_position_curve
+from ui.adaptive_tables import render_adaptive_table
 from ui.display import render_note_card, render_page_banner, render_result_strip, render_section_heading, render_team_header
 from ui.styles import inject_dashboard_styles
 
@@ -39,15 +40,13 @@ def _render_goal_cards(kpis: dict[str, int | float | None]) -> None:
     )
 
 
-def _style_goal_split(df: pd.DataFrame):
+def _format_goal_split(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return df.style
-
-    return (
-        df.style.format({"GoalsFor": "{:.0f}", "GoalsAgainst": "{:.0f}", "Points": "{:.0f}", "Matches": "{:.0f}"})
-        .map(lambda _: "color:#168a5b;font-weight:700;", subset=["GoalsFor"])
-        .map(lambda _: "color:#cf3f4f;font-weight:700;", subset=["GoalsAgainst"])
-    )
+        return df
+    out = df.copy()
+    if "Venue" in out.columns:
+        out["Venue"] = out["Venue"].replace({"HOME": "Domicile", "AWAY": "Exterieur"})
+    return out
 
 
 def _prepare_form_df(matches: pd.DataFrame, limit: int) -> pd.DataFrame:
@@ -83,6 +82,38 @@ def _format_team_calendar(df: pd.DataFrame) -> pd.DataFrame:
     out["status"] = out["status"].fillna("UNKNOWN")
     out["matchday"] = out["matchday"].fillna("--")
     return out[["kickoff", "matchday", "status", "venue", "opponent_name", "score", "result", "points"]]
+
+
+def _match_options(df: pd.DataFrame) -> dict[int, str]:
+    if df.empty:
+        return {}
+    source = df.reset_index(drop=True)
+    options: dict[int, str] = {}
+    for index, row in source.iterrows():
+        match_id = int(source.iloc[index]["match_id"])
+        label = f"{row['team_name']} vs {row['opponent_name']}"
+        options[match_id] = label
+    return options
+
+
+def _render_match_detail_entry(df: pd.DataFrame, key_prefix: str) -> None:
+    options = _match_options(df)
+    if not options:
+        return
+    match_ids = list(options.keys())
+    with st.form(key=f"{key_prefix}_match_detail_form", border=False):
+        selection = st.selectbox(
+            "Open match detail",
+            match_ids,
+            key=f"{key_prefix}_match_detail",
+            format_func=lambda match_id: options[int(match_id)],
+        )
+        submitted = st.form_submit_button("Go to MATCH DETAIL")
+    if submitted:
+        match_id = int(selection)
+        st.session_state["selected_match_id"] = match_id
+        st.query_params["match_id"] = str(match_id)
+        st.switch_page("pages/5_MATCH_DETAIL.py")
 
 
 def main() -> None:
@@ -133,7 +164,13 @@ def main() -> None:
         with c1:
             render_home_away_chart(split)
         with c2:
-            st.dataframe(_style_goal_split(split), hide_index=True, use_container_width=True)
+            render_adaptive_table(
+                _format_goal_split(split),
+                title="Synthese split",
+                badge_columns={"Venue": "venue"},
+                strong_columns={"GoalsFor", "GoalsAgainst", "Points"},
+                max_height=360,
+            )
 
     render_section_heading("Calendrier", "Derniers matchs et prochaines affiches pour le club selectionne.")
     recent, upcoming = get_recent_matches(
@@ -149,17 +186,29 @@ def main() -> None:
 
     cal_left, cal_right = st.columns(2)
     with cal_left:
-        st.caption("Derniers matchs")
         if recent_view.empty:
             st.info("Aucun match recent.")
         else:
-            st.dataframe(_format_team_calendar(recent_view), hide_index=True, use_container_width=True)
+            render_adaptive_table(
+                _format_team_calendar(recent_view),
+                title="Derniers matchs",
+                badge_columns={"status": "status", "venue": "venue", "result": "result"},
+                strong_columns={"opponent_name"},
+                max_height=760,
+            )
+            _render_match_detail_entry(recent_view, "team_recent")
     with cal_right:
-        st.caption("Matchs a venir")
         if upcoming_view.empty:
             st.info("Aucun match a venir.")
         else:
-            st.dataframe(_format_team_calendar(upcoming_view), hide_index=True, use_container_width=True)
+            render_adaptive_table(
+                _format_team_calendar(upcoming_view),
+                title="Matchs a venir",
+                badge_columns={"status": "status", "venue": "venue", "result": "result"},
+                strong_columns={"opponent_name"},
+                max_height=640,
+            )
+            _render_match_detail_entry(upcoming_view, "team_upcoming")
 
     render_section_heading("Courbe de classement")
     curve = get_standings_curve(filters.competition_id, filters.season, filters.team_id)

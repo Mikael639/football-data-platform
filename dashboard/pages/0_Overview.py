@@ -4,6 +4,7 @@ import streamlit as st
 from data.dashboard_data import describe_season_source, get_current_standings, get_kpis, get_recent_matches, get_standings_curve
 from state.filters import render_global_filters
 from ui.charts import render_position_curve
+from ui.adaptive_tables import render_adaptive_table
 from ui.display import render_note_card, render_page_banner, render_section_heading
 from ui.styles import inject_dashboard_styles
 
@@ -39,6 +40,48 @@ def _format_match_table(df: pd.DataFrame) -> pd.DataFrame:
     table["status"] = table["status"].fillna("UNKNOWN")
     table["matchday"] = table["matchday"].fillna("--")
     return table[["kickoff", "status", "matchday", "home_team", "score", "away_team"]]
+
+
+def _match_options(df: pd.DataFrame) -> dict[int, str]:
+    if df.empty:
+        return {}
+    source = df.reset_index(drop=True)
+    options: dict[int, str] = {}
+    for index, row in source.iterrows():
+        match_id = int(source.iloc[index]["match_id"])
+        label = f"{row['home_team']} vs {row['away_team']}"
+        options[match_id] = label
+    return options
+
+
+def _overview_standing_row_class(row: pd.Series) -> str:
+    try:
+        position = int(row["Pos"])
+    except Exception:
+        return ""
+    if position <= 4:
+        return "fdp-row-top"
+    return ""
+
+
+def _render_match_detail_entry(df: pd.DataFrame, key_prefix: str) -> None:
+    options = _match_options(df)
+    if not options:
+        return
+    match_ids = list(options.keys())
+    with st.form(key=f"{key_prefix}_match_detail_form", border=False):
+        selection = st.selectbox(
+            "Open match detail",
+            match_ids,
+            key=f"{key_prefix}_match_detail",
+            format_func=lambda match_id: options[int(match_id)],
+        )
+        submitted = st.form_submit_button("Go to MATCH DETAIL")
+    if submitted:
+        match_id = int(selection)
+        st.session_state["selected_match_id"] = match_id
+        st.query_params["match_id"] = str(match_id)
+        st.switch_page("pages/5_MATCH_DETAIL.py")
 
 
 def main() -> None:
@@ -89,10 +132,12 @@ def main() -> None:
             }
         )
         standings_display["Trend"] = standings_display["Trend"].map(_trend_symbol)
-        st.dataframe(
+        render_adaptive_table(
             standings_display[["Pos", "Trend", "Equipe", "Pts", "MJ", "G", "N", "P", "BP", "BC", "Diff"]],
-            hide_index=True,
-            use_container_width=True,
+            badge_columns={"Trend": "trend"},
+            row_class_renderer=_overview_standing_row_class,
+            strong_columns={"Equipe"},
+            max_height=980,
         )
 
     render_section_heading("Position au fil des journees")
@@ -113,17 +158,29 @@ def main() -> None:
     )
     left, right = st.columns(2)
     with left:
-        st.caption("Derniers 10 matchs")
         if recent_matches.empty:
             st.info("Aucun match recent disponible.")
         else:
-            st.dataframe(_format_match_table(recent_matches), hide_index=True, use_container_width=True)
+            render_adaptive_table(
+                _format_match_table(recent_matches),
+                title="Derniers 10 matchs",
+                badge_columns={"status": "status"},
+                strong_columns={"home_team", "away_team"},
+                max_height=760,
+            )
+            _render_match_detail_entry(recent_matches, "overview_recent")
     with right:
-        st.caption("Prochains 5 matchs")
         if upcoming_matches.empty:
             st.info("Aucun match a venir sur cette plage.")
         else:
-            st.dataframe(_format_match_table(upcoming_matches), hide_index=True, use_container_width=True)
+            render_adaptive_table(
+                _format_match_table(upcoming_matches),
+                title="Prochains 5 matchs",
+                badge_columns={"status": "status"},
+                strong_columns={"home_team", "away_team"},
+                max_height=640,
+            )
+            _render_match_detail_entry(upcoming_matches, "overview_upcoming")
 
 
 if __name__ == "__main__":

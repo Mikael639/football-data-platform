@@ -4,8 +4,10 @@ import json
 import os
 import re
 import unicodedata
+import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -22,12 +24,21 @@ SEASON_START_EXPR = (
     f"ELSE EXTRACT(YEAR FROM {MATCH_DATE_EXPR})::int - 1 END"
 )
 DEFAULT_CACHE_TTL = 300
+STANDARD_CSV_PATTERN = "data/raw/laliga_{start}_{end}_standard.csv"
 KNOWN_COMPETITION_NAMES = {
+    2001: "UEFA Champions League",
     2002: "Bundesliga",
+    2003: "UEFA Europa League",
     2014: "Primera Division",
     2015: "Ligue 1",
     2019: "Serie A",
     2021: "Premier League",
+    2154: "UEFA Conference League",
+}
+EUROPEAN_COMPETITION_NAMES = {
+    "Champions League",
+    "Europa League",
+    "Conference League",
 }
 
 TEAM_NAME_EQUIVALENTS = {
@@ -113,6 +124,23 @@ def _normalize_competition_display_name(value: Any) -> str:
 def enrich_live_enabled() -> bool:
     value = os.getenv("ENRICH_LIVE", "false").strip().lower()
     return value in {"1", "true", "yes", "y", "on"}
+
+
+def _normalize_competition_display_name(value: Any) -> str:
+    text_value = str(value or "").strip()
+    if text_value in {"Primera Division", "Primera DivisiÃ³n", "PD"}:
+        return "LaLiga"
+    if text_value in {"UEFA Champions League", "Champions League", "CL"}:
+        return "Champions League"
+    if text_value in {"UEFA Europa League", "Europa League", "EL"}:
+        return "Europa League"
+    if text_value in {"UEFA Conference League", "Conference League", "UCL", "UECL"}:
+        return "Conference League"
+    return text_value
+
+
+def is_european_competition_name(value: Any) -> bool:
+    return _normalize_competition_display_name(value) in EUROPEAN_COMPETITION_NAMES
 
 
 def current_season_start_year_dash() -> int:
@@ -217,16 +245,212 @@ def _season_start_from_label(season: str | None) -> int | None:
         return None
 
 
+def _season_standard_csv_path(season: str | None) -> Path | None:
+    if season in {None, "", "Toutes"}:
+        return None
+    match = re.fullmatch(r"(\d{4})-(\d{4})", str(season).strip())
+    if not match:
+        return None
+    return Path(STANDARD_CSV_PATTERN.format(start=match.group(1), end=match.group(2)))
+
+
+def _season_standard_csv_paths(season: str | None) -> list[Path]:
+    if season in {None, "", "Toutes"}:
+        return sorted(Path("data/raw").glob("laliga_*_standard.csv"))
+    path = _season_standard_csv_path(season)
+    return [path] if path is not None else []
+
+
+def _extract_nationality_label(value: Any) -> str | None:
+    text_value = str(value or "").replace("\xa0", " ").strip()
+    if not text_value:
+        return None
+    parts = text_value.split()
+    if len(parts) > 1:
+        return parts[-1]
+    return text_value
+
+
+def _stable_player_display_id(season: str, full_name: str, team_name: str) -> int:
+    digest = hashlib.sha1(f"{season}|{full_name}|{team_name}".encode("utf-8")).hexdigest()
+    return int(digest[:12], 16) % 2_000_000_000
+
+
+def _coalesce_str_values(series: pd.Series) -> str | None:
+    for value in series:
+        text_value = str(value).strip() if value is not None else ""
+        if text_value and text_value.lower() not in {"nan", "none"}:
+            return text_value
+    return None
+
+
+def _birth_year_column(frame: pd.DataFrame) -> str | None:
+    for column in frame.columns:
+        normalized = unicodedata.normalize("NFKD", str(column)).encode("ascii", "ignore").decode("ascii").lower()
+        normalized_letters = re.sub(r"[^a-z]", "", normalized)
+        if normalized_letters in {"ne", "n"}:
+            return column
+    return None
+
+
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
-def fact_match_has_season_column() -> bool:
+def get_historical_players_from_standard_csv(team_id: int | None = None, season: str | None = None) -> pd.DataFrame:
+    path = _season_standard_csv_path(season)
+    if path is None or not path.exists():
+        return pd.DataFrame()
+
+    frame = pd.read_csv(path, sep=";", skiprows=1, encoding="utf-8")
+    frame.columns = [str(column).strip() for column in frame.columns]
+    required_columns = {"Joueur", "Nation", "Pos", "Effectif", "Né"}
+    if not required_columns.issubset(frame.columns):
+        return pd.DataFrame()
+
+    team_aliases: set[str] | None = None
+    if team_id is not None:
+        groups = get_team_alias_groups(competition_id=2014, season=season)
+        if groups.empty:
+            return pd.DataFrame()
+        selected = groups[groups["team_id"] == int(team_id)]
+        if selected.empty:
+            selected = groups[groups["alias_team_ids"].apply(lambda ids: int(team_id) in (ids or []))]
+        if selected.empty:
+            return pd.DataFrame()
+        alias_names = selected.iloc[0].get("alias_names", []) or []
+        canonical_name = selected.iloc[0].get("team_name")
+        team_aliases = {_normalize_team_alias(str(name)) for name in alias_names}
+        team_aliases.add(_normalize_team_alias(str(canonical_name)))
+
+    working = frame.copy()
+    working["normalized_team_name"] = working["Effectif"].map(_normalize_team_alias)
+    if team_aliases is not None:
+        working = working[working["normalized_team_name"].isin(team_aliases)]
+
+    if working.empty:
+        return pd.DataFrame()
+
+    working["full_name"] = working["Joueur"].astype(str).str.strip()
+    working["position"] = working["Pos"].astype(str).str.strip().replace("", None)
+    working["nationality"] = working["Nation"].map(_extract_nationality_label)
+    working["birth_date"] = pd.to_numeric(working["Né"], errors="coerce").apply(
+        lambda year: f"{int(year)}-01-01" if pd.notna(year) else None
+    )
+    working["team_name"] = working["Effectif"].astype(str).str.strip()
+    working["player_id"] = working.apply(
+        lambda row: _stable_player_display_id(str(season), str(row["full_name"]), str(row["team_name"])),
+        axis=1,
+    )
+    working["team_id"] = team_id
+
+    output = (
+        working[["player_id", "full_name", "position", "nationality", "birth_date", "team_id", "team_name"]]
+        .drop_duplicates(subset=["full_name", "team_name"])
+        .sort_values(["team_name", "full_name"])
+        .reset_index(drop=True)
+    )
+    return output
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_historical_players_catalog(team_id: int | None = None, season: str | None = None) -> pd.DataFrame:
+    paths = [path for path in _season_standard_csv_paths(season) if path.exists()]
+    if not paths:
+        return pd.DataFrame()
+
+    team_aliases: set[str] | None = None
+    canonical_team_name: str | None = None
+    if team_id is not None:
+        groups = get_team_alias_groups(competition_id=2014, season=season)
+        if groups.empty:
+            return pd.DataFrame()
+        selected = groups[groups["team_id"] == int(team_id)]
+        if selected.empty:
+            selected = groups[groups["alias_team_ids"].apply(lambda ids: int(team_id) in (ids or []))]
+        if selected.empty:
+            return pd.DataFrame()
+        alias_names = selected.iloc[0].get("alias_names", []) or []
+        canonical_team_name = str(selected.iloc[0].get("team_name") or "").strip() or None
+        team_aliases = {_normalize_team_alias(str(name)) for name in alias_names}
+        team_aliases.add(_normalize_team_alias(str(canonical_team_name)))
+
+    season_frames: list[pd.DataFrame] = []
+    for path in paths:
+        frame = pd.read_csv(path, sep=";", skiprows=1, encoding="utf-8")
+        frame.columns = [str(column).strip() for column in frame.columns]
+        birth_year_column = _birth_year_column(frame)
+        required_columns = {"Joueur", "Nation", "Pos", "Effectif"}
+        if birth_year_column is None or not required_columns.issubset(frame.columns):
+            continue
+        frame = frame.copy()
+        frame["__season"] = path.stem.replace("laliga_", "").replace("_standard", "").replace("_", "-")
+        frame["__birth_year"] = frame[birth_year_column]
+        season_frames.append(frame)
+
+    if not season_frames:
+        return pd.DataFrame()
+
+    working = pd.concat(season_frames, ignore_index=True)
+    working["normalized_team_name"] = working["Effectif"].map(_normalize_team_alias)
+    if team_aliases is not None:
+        working = working[working["normalized_team_name"].isin(team_aliases)]
+
+    if working.empty:
+        return pd.DataFrame()
+
+    working["full_name"] = working["Joueur"].astype(str).str.strip()
+    working["position"] = working["Pos"].astype(str).str.strip().replace({"": None, "nan": None, "None": None})
+    working["nationality"] = working["Nation"].map(_extract_nationality_label)
+    working["birth_date"] = pd.to_numeric(working["__birth_year"], errors="coerce").apply(
+        lambda year: f"{int(year)}-01-01" if pd.notna(year) else None
+    )
+    working["team_name"] = (
+        canonical_team_name
+        if canonical_team_name is not None and team_id is not None
+        else working["Effectif"].astype(str).str.strip()
+    )
+    working["completeness"] = working[["position", "nationality", "birth_date"]].notna().sum(axis=1)
+    working["season_sort"] = working["__season"].map(_season_start_from_label).fillna(0).astype(int)
+    working["player_id"] = working.apply(
+        lambda row: _stable_player_display_id(str(season or row["__season"]), str(row["full_name"]), str(row["team_name"])),
+        axis=1,
+    )
+    working["team_id"] = team_id
+
+    grouped_rows: list[dict[str, Any]] = []
+    grouped = working.sort_values(["completeness", "season_sort"], ascending=[False, False]).groupby(
+        ["full_name", "team_name"], sort=True
+    )
+    for _, group in grouped:
+        best = group.iloc[0]
+        grouped_rows.append(
+            {
+                "player_id": int(best["player_id"]),
+                "full_name": str(best["full_name"]),
+                "position": _coalesce_str_values(group["position"]),
+                "nationality": _coalesce_str_values(group["nationality"]),
+                "birth_date": _coalesce_str_values(group["birth_date"]),
+                "team_id": team_id,
+                "team_name": str(best["team_name"]),
+            }
+        )
+
+    return pd.DataFrame(grouped_rows).sort_values(["team_name", "full_name"]).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def fact_match_has_column(column_name: str) -> bool:
     query = """
     SELECT 1
     FROM information_schema.columns
     WHERE table_name = 'fact_match'
-      AND column_name = 'season'
+      AND column_name = :column_name
     LIMIT 1
     """
-    return not _read_sql(query).empty
+    return not _read_sql(query, {"column_name": column_name}).empty
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def fact_match_has_season_column() -> bool:
+    return fact_match_has_column("season")
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
@@ -490,6 +714,15 @@ def get_competitions() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_european_competitions() -> pd.DataFrame:
+    competitions = get_competitions()
+    if competitions.empty:
+        return competitions
+    mask = competitions["competition_name"].map(is_european_competition_name)
+    return competitions.loc[mask].reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
 def get_seasons(competition_id: int | None = None) -> pd.DataFrame:
     if fact_match_has_season_column():
         query = """
@@ -622,6 +855,8 @@ def get_matches(
         if fact_match_has_season_column()
         else f"CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1)"
     )
+    stage_expr = "m.stage" if fact_match_has_column("stage") else "NULL"
+    group_expr = "m.group_name" if fact_match_has_column("group_name") else "NULL"
     where_clause, params = build_match_where_clause(
         DashboardFilters(
             competition_id=competition_id,
@@ -642,6 +877,8 @@ def get_matches(
       m.kickoff_utc,
       m.status,
       m.matchday,
+      {stage_expr} AS stage,
+      {group_expr} AS group_name,
       m.home_team_id,
       ht.team_name AS home_team,
       ht.short_name AS home_short_name,
@@ -665,6 +902,281 @@ def get_matches(
     df["competition_name"] = df["competition_name"].map(_normalize_competition_display_name)
     df["date_dt"] = pd.to_datetime(df["match_date"], errors="coerce")
     df["kickoff_utc"] = pd.to_datetime(df["kickoff_utc"], errors="coerce", utc=True)
+    return df
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_match_detail(match_id: int) -> dict[str, Any] | None:
+    season_expr = (
+        f"COALESCE(NULLIF(TRIM(m.season), ''), CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1))"
+        if fact_match_has_season_column()
+        else f"CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1)"
+    )
+    stage_expr = "m.stage" if fact_match_has_column("stage") else "NULL"
+    group_expr = "m.group_name" if fact_match_has_column("group_name") else "NULL"
+    query = f"""
+    SELECT
+      m.match_id,
+      m.competition_id,
+      COALESCE(c.competition_name, {_competition_name_sql("m.competition_id")}) AS competition_name,
+      {season_expr} AS season,
+      {MATCH_DATE_EXPR} AS match_date,
+      m.date_id,
+      m.kickoff_utc,
+      m.status,
+      m.matchday,
+      {stage_expr} AS stage,
+      {group_expr} AS group_name,
+      m.home_team_id,
+      ht.team_name AS home_team,
+      ht.short_name AS home_short_name,
+      ht.crest_url AS home_crest_url,
+      m.away_team_id,
+      at.team_name AS away_team,
+      at.short_name AS away_short_name,
+      at.crest_url AS away_crest_url,
+      m.home_score,
+      m.away_score
+    FROM fact_match m
+    JOIN dim_team ht ON ht.team_id = m.home_team_id
+    JOIN dim_team at ON at.team_id = m.away_team_id
+    LEFT JOIN dim_competition c ON c.competition_id = m.competition_id
+    WHERE m.match_id = :match_id
+    LIMIT 1
+    """
+    df = _read_sql(query, {"match_id": int(match_id)})
+    if df.empty:
+        return None
+    row = df.iloc[0].to_dict()
+    row["competition_name"] = _normalize_competition_display_name(row.get("competition_name"))
+    row["kickoff_utc"] = pd.to_datetime(row.get("kickoff_utc"), errors="coerce", utc=True)
+    row["match_date"] = pd.to_datetime(row.get("match_date"), errors="coerce")
+    return row
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_match_picker(limit: int = 150) -> pd.DataFrame:
+    season_expr = (
+        f"COALESCE(NULLIF(TRIM(m.season), ''), CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1))"
+        if fact_match_has_season_column()
+        else f"CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1)"
+    )
+    query = f"""
+    SELECT
+      m.match_id,
+      m.competition_id,
+      COALESCE(c.competition_name, {_competition_name_sql("m.competition_id")}) AS competition_name,
+      {season_expr} AS season,
+      COALESCE(m.kickoff_utc, m.date_id::timestamp) AS match_ts,
+      m.status,
+      ht.team_name AS home_team,
+      at.team_name AS away_team
+    FROM fact_match m
+    JOIN dim_team ht ON ht.team_id = m.home_team_id
+    JOIN dim_team at ON at.team_id = m.away_team_id
+    LEFT JOIN dim_competition c ON c.competition_id = m.competition_id
+    ORDER BY COALESCE(m.kickoff_utc, m.date_id::timestamp) DESC NULLS LAST, m.match_id DESC
+    LIMIT :limit
+    """
+    df = _read_sql(query, {"limit": int(limit)})
+    if df.empty:
+        return df
+    df["competition_name"] = df["competition_name"].map(_normalize_competition_display_name)
+    df["match_ts"] = pd.to_datetime(df["match_ts"], errors="coerce", utc=True)
+    df["status"] = df["status"].fillna("UNKNOWN")
+    return df
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_match_player_stats(match_id: int) -> pd.DataFrame:
+    query = """
+    SELECT
+      s.match_id,
+      s.player_id,
+      p.full_name,
+      p.position,
+      p.team_id,
+      t.team_name,
+      s.minutes,
+      s.goals,
+      s.assists,
+      s.shots,
+      s.passes,
+      s.pass_accuracy
+    FROM fact_player_match_stats s
+    JOIN dim_player p ON p.player_id = s.player_id
+    LEFT JOIN dim_team t ON t.team_id = p.team_id
+    WHERE s.match_id = :match_id
+    ORDER BY s.minutes DESC, s.goals DESC, s.assists DESC, p.full_name
+    """
+    return _read_sql(query, {"match_id": int(match_id)})
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_match_neighbors(match_id: int, team_id: int, limit: int = 2) -> pd.DataFrame:
+    query = """
+    WITH base_match AS (
+      SELECT COALESCE(kickoff_utc, date_id::timestamp) AS base_ts
+      FROM fact_match
+      WHERE match_id = :match_id
+      LIMIT 1
+    ),
+    team_matches AS (
+      SELECT
+        m.match_id,
+        COALESCE(m.kickoff_utc, m.date_id::timestamp) AS match_ts,
+        m.status,
+        m.matchday,
+        CASE
+          WHEN m.home_team_id = :team_id THEN 'Home'
+          ELSE 'Away'
+        END AS venue,
+        CASE
+          WHEN m.home_team_id = :team_id THEN at.team_name
+          ELSE ht.team_name
+        END AS opponent_name,
+        CASE
+          WHEN m.home_team_id = :team_id THEN m.home_score
+          ELSE m.away_score
+        END AS goals_for,
+        CASE
+          WHEN m.home_team_id = :team_id THEN m.away_score
+          ELSE m.home_score
+        END AS goals_against
+      FROM fact_match m
+      JOIN dim_team ht ON ht.team_id = m.home_team_id
+      JOIN dim_team at ON at.team_id = m.away_team_id
+      WHERE m.home_team_id = :team_id OR m.away_team_id = :team_id
+    )
+    SELECT *
+    FROM (
+      SELECT 'previous' AS neighbor_type, tm.*
+      FROM team_matches tm
+      JOIN base_match bm ON tm.match_ts < bm.base_ts
+      ORDER BY tm.match_ts DESC, tm.match_id DESC
+      LIMIT :limit
+    ) previous_rows
+    UNION ALL
+    SELECT *
+    FROM (
+      SELECT 'next' AS neighbor_type, tm.*
+      FROM team_matches tm
+      JOIN base_match bm ON tm.match_ts > bm.base_ts
+      ORDER BY tm.match_ts ASC, tm.match_id ASC
+      LIMIT :limit
+    ) next_rows
+    """
+    df = _read_sql(query, {"match_id": int(match_id), "team_id": int(team_id), "limit": int(limit)})
+    if df.empty:
+        return df
+    df["match_ts"] = pd.to_datetime(df["match_ts"], errors="coerce", utc=True)
+    return df
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_match_head_to_head(match_id: int, limit: int = 5) -> pd.DataFrame:
+    season_expr = (
+        f"COALESCE(NULLIF(TRIM(m.season), ''), CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1))"
+        if fact_match_has_season_column()
+        else f"CONCAT({SEASON_START_EXPR}, '-', {SEASON_START_EXPR} + 1)"
+    )
+    query = f"""
+    WITH base_match AS (
+      SELECT match_id, home_team_id, away_team_id
+      FROM fact_match
+      WHERE match_id = :match_id
+      LIMIT 1
+    )
+    SELECT
+      m.match_id,
+      COALESCE(c.competition_name, {_competition_name_sql("m.competition_id")}) AS competition_name,
+      {season_expr} AS season,
+      COALESCE(m.kickoff_utc, m.date_id::timestamp) AS match_ts,
+      m.status,
+      m.matchday,
+      ht.team_name AS home_team,
+      at.team_name AS away_team,
+      m.home_score,
+      m.away_score
+    FROM fact_match m
+    JOIN base_match bm ON (
+      (m.home_team_id = bm.home_team_id AND m.away_team_id = bm.away_team_id)
+      OR
+      (m.home_team_id = bm.away_team_id AND m.away_team_id = bm.home_team_id)
+    )
+    JOIN dim_team ht ON ht.team_id = m.home_team_id
+    JOIN dim_team at ON at.team_id = m.away_team_id
+    LEFT JOIN dim_competition c ON c.competition_id = m.competition_id
+    WHERE m.match_id <> :match_id
+    ORDER BY COALESCE(m.kickoff_utc, m.date_id::timestamp) DESC NULLS LAST, m.match_id DESC
+    LIMIT :limit
+    """
+    df = _read_sql(query, {"match_id": int(match_id), "limit": int(limit)})
+    if df.empty:
+        return df
+    df["competition_name"] = df["competition_name"].map(_normalize_competition_display_name)
+    df["match_ts"] = pd.to_datetime(df["match_ts"], errors="coerce", utc=True)
+    return df
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_match_ranking_context(
+    competition_id: int,
+    season: str | None,
+    matchday: int | None,
+    home_team_id: int,
+    away_team_id: int,
+) -> pd.DataFrame:
+    if matchday is None or pd.isna(matchday):
+        return pd.DataFrame()
+
+    season_start = _season_start_from_label(season)
+    if season_start is None:
+        return pd.DataFrame()
+
+    query = """
+    WITH scoped AS (
+      SELECT *
+      FROM fact_standings_snapshot
+      WHERE competition_id = :competition_id
+        AND season = :season_start
+        AND team_id IN (:home_team_id, :away_team_id)
+        AND matchday IN (:before_matchday, :after_matchday)
+    )
+    SELECT
+      s.matchday,
+      CASE
+        WHEN s.matchday = :before_matchday THEN 'Before'
+        WHEN s.matchday = :after_matchday THEN 'After'
+        ELSE 'Snapshot'
+      END AS phase,
+      s.team_id,
+      t.team_name,
+      s.position,
+      s.points,
+      s.played_games,
+      s.won,
+      s.draw,
+      s.lost,
+      s.goals_for,
+      s.goals_against,
+      s.goal_difference
+    FROM scoped s
+    JOIN dim_team t ON t.team_id = s.team_id
+    ORDER BY
+      CASE WHEN s.matchday = :before_matchday THEN 0 ELSE 1 END,
+      s.position NULLS LAST,
+      t.team_name
+    """
+    params = {
+        "competition_id": int(competition_id),
+        "season_start": int(season_start),
+        "home_team_id": int(home_team_id),
+        "away_team_id": int(away_team_id),
+        "before_matchday": max(int(matchday) - 1, 0),
+        "after_matchday": int(matchday),
+    }
+    df = _read_sql(query, params)
     return df
 
 
@@ -927,13 +1439,56 @@ def get_home_away_split(
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
-def get_players(team_id: int | None = None) -> pd.DataFrame:
-    alias_clause = ""
-    params: dict[str, Any] = {}
+def get_players(
+    team_id: int | None = None,
+    competition_id: int | None = None,
+    season: str | None = None,
+) -> pd.DataFrame:
+    if season is not None and competition_id in {None, 2014}:
+        historical_players = get_historical_players_catalog(team_id=team_id, season=season)
+        if not historical_players.empty:
+            return historical_players
+        historical_players = get_historical_players_from_standard_csv(team_id=team_id, season=season)
+        if not historical_players.empty:
+            return historical_players
+    elif season in {None, "", "Toutes"} and competition_id in {None, 2014}:
+        historical_players = get_historical_players_catalog(team_id=team_id, season=season)
+        if not historical_players.empty:
+            return historical_players
+
+    params: dict[str, Any] = {
+        "competition_id": competition_id,
+        "season": season,
+    }
+    team_clause = ""
     if team_id is not None:
-        team_ids = get_team_alias_ids(team_id)
+        team_ids = get_team_alias_ids(team_id, competition_id, season)
         in_clause = _build_sql_in_clause(team_ids, "player_team_id", params)
-        alias_clause = f" AND p.team_id IN ({in_clause})"
+        team_clause = f" AND p.team_id IN ({in_clause})"
+
+    if season is not None:
+        query = """
+        SELECT DISTINCT
+          p.player_id,
+          p.full_name,
+          p.position,
+          p.nationality,
+          p.birth_date,
+          p.team_id,
+          t.team_name
+        FROM fact_player_match_stats s
+        JOIN fact_match m ON m.match_id = s.match_id
+        JOIN dim_player p ON p.player_id = s.player_id
+        LEFT JOIN dim_team t ON t.team_id = p.team_id
+        WHERE (:competition_id IS NULL OR m.competition_id = :competition_id)
+          AND m.season = :season
+        """ + team_clause + """
+        ORDER BY t.team_name, p.full_name
+        """
+        df = _read_sql(query, params)
+        if not df.empty:
+            return df
+
     query = """
     SELECT
       p.player_id,
@@ -946,7 +1501,7 @@ def get_players(team_id: int | None = None) -> pd.DataFrame:
     FROM dim_player p
     LEFT JOIN dim_team t ON t.team_id = p.team_id
     WHERE 1 = 1
-    """ + alias_clause + """
+    """ + team_clause + """
     ORDER BY t.team_name, p.full_name
     """
     return _read_sql(query, params)

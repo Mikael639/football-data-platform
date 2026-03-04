@@ -17,7 +17,12 @@ from dashboard.data.dashboard_data import (
     compute_team_kpis,
     describe_season_source,
     get_current_standings,
+    get_european_competitions,
+    get_historical_players_catalog,
+    get_match_detail,
+    get_historical_players_from_standard_csv,
     get_live_league_tables,
+    get_players,
     get_teams,
 )
 
@@ -203,6 +208,23 @@ def test_describe_season_source_distinguishes_current_and_historical_seasons():
     assert "historique consolide" in describe_season_source("2024-2025")
 
 
+def test_get_european_competitions_filters_uefa_competitions(monkeypatch):
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data.get_competitions",
+        lambda: pd.DataFrame(
+            [
+                {"competition_id": 2001, "competition_name": "Champions League"},
+                {"competition_id": 2003, "competition_name": "Europa League"},
+                {"competition_id": 2014, "competition_name": "LaLiga"},
+            ]
+        ),
+    )
+
+    competitions = get_european_competitions()
+
+    assert competitions["competition_name"].tolist() == ["Champions League", "Europa League"]
+
+
 def test_get_teams_groups_alias_variants(monkeypatch):
     monkeypatch.setattr(
         "dashboard.data.dashboard_data._read_sql",
@@ -217,10 +239,165 @@ def test_get_teams_groups_alias_variants(monkeypatch):
     )
 
     teams = get_teams(2014, None)
-
     assert len(teams) == 2
     assert teams["team_name"].tolist() == ["Barcelona", "Real Madrid"]
     assert teams.iloc[0]["alias_team_ids"] == [81, 529]
+
+
+def test_get_players_prefers_season_filtered_player_stats(monkeypatch):
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_read_sql(query, params=None):
+        calls.append((query, params or {}))
+        if "FROM fact_player_match_stats" in query:
+            return pd.DataFrame(
+                [
+                    {
+                        "player_id": 7,
+                        "full_name": "Karim Benzema",
+                        "position": "FW",
+                        "nationality": None,
+                        "birth_date": None,
+                        "team_id": 86,
+                        "team_name": "Real Madrid",
+                    }
+                ]
+            )
+        return pd.DataFrame()
+
+    monkeypatch.setattr("dashboard.data.dashboard_data._read_sql", fake_read_sql)
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data.get_team_alias_ids",
+        lambda team_id, competition_id=None, season=None: [int(team_id)],
+    )
+
+    players = get_players(team_id=86, competition_id=2014, season="2020-2021")
+
+    assert not players.empty
+    assert players.iloc[0]["full_name"] == "Karim Benzema"
+    assert any("FROM fact_player_match_stats" in query for query, _ in calls)
+
+
+def test_get_historical_players_from_standard_csv_filters_team_and_season(tmp_path, monkeypatch):
+    csv_path = tmp_path / "laliga_2020_2021_standard.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "Temps de jeu;;;;Performances",
+                "RK;Joueur;Nation;Pos;Effectif;Âge;Né;MP",
+                "1;Karim Benzema;fr FRA;FW;Real Madrid;33;1987;34",
+                "2;Luka Modrić;hr CRO;MF;Real Madrid CF;35;1985;33",
+                "3;Lionel Messi;ar ARG;FW;Barcelona;33;1987;35",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dashboard.data.dashboard_data._season_standard_csv_path", lambda season: csv_path)
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data.get_team_alias_groups",
+        lambda competition_id=None, season=None: pd.DataFrame(
+            [
+                {
+                    "team_id": 86,
+                    "team_name": "Real Madrid",
+                    "alias_names": ["Real Madrid", "Real Madrid CF"],
+                }
+            ]
+        ),
+    )
+
+    players = get_historical_players_from_standard_csv(team_id=86, season="2020-2021")
+
+    assert players["full_name"].tolist() == ["Karim Benzema", "Luka Modrić"]
+    assert players["team_name"].tolist() == ["Real Madrid", "Real Madrid CF"]
+
+
+def test_get_historical_players_from_standard_csv_accepts_alias_team_id(tmp_path, monkeypatch):
+    csv_path = tmp_path / "laliga_2020_2021_standard.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "Temps de jeu;;;;Performances",
+                "RK;Joueur;Nation;Pos;Effectif;Âge;Né;MP",
+                "1;Karim Benzema;fr FRA;FW;Real Madrid;33;1987;34",
+                "2;Luka Modrić;hr CRO;MF;Real Madrid CF;35;1985;33",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dashboard.data.dashboard_data._season_standard_csv_path", lambda season: csv_path)
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data.get_team_alias_groups",
+        lambda competition_id=None, season=None: pd.DataFrame(
+            [
+                {
+                    "team_id": 86,
+                    "team_name": "Real Madrid",
+                    "alias_names": ["Real Madrid", "Real Madrid CF"],
+                    "alias_team_ids": [86, 541],
+                }
+            ]
+        ),
+    )
+
+    players = get_historical_players_from_standard_csv(team_id=541, season="2020-2021")
+
+    assert players["full_name"].tolist() == ["Karim Benzema", "Luka Modrić"]
+
+
+def test_get_historical_players_catalog_deduplicates_all_seasons(tmp_path, monkeypatch):
+    season_a = tmp_path / "laliga_2020_2021_standard.csv"
+    season_b = tmp_path / "laliga_2021_2022_standard.csv"
+    season_a.write_text(
+        "\n".join(
+            [
+                "Temps de jeu;;;;Performances",
+                "RK;Joueur;Nation;Pos;Effectif;Ã‚ge;NÃ©;MP",
+                "1;Vinicius Junior;;;Real Madrid;20;;35",
+                "2;Luka ModriÄ‡;hr CRO;MF;Real Madrid CF;35;1985;33",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    season_b.write_text(
+        "\n".join(
+            [
+                "Temps de jeu;;;;Performances",
+                "RK;Joueur;Nation;Pos;Effectif;Ã‚ge;NÃ©;MP",
+                "1;Vinicius Junior;br BRA;FW;Real Madrid;21;2000;35",
+                "2;Luka ModriÄ‡;hr CRO;CM;Real Madrid;36;1985;28",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("dashboard.data.dashboard_data._season_standard_csv_paths", lambda season: [season_a, season_b])
+    monkeypatch.setattr("dashboard.data.dashboard_data._birth_year_column", lambda frame: frame.columns[6])
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data.get_team_alias_groups",
+        lambda competition_id=None, season=None: pd.DataFrame(
+            [
+                {
+                    "team_id": 86,
+                    "team_name": "Real Madrid",
+                    "alias_names": ["Real Madrid", "Real Madrid CF"],
+                    "alias_team_ids": [86, 541],
+                }
+            ]
+        ),
+    )
+
+    catalog_fn = getattr(get_historical_players_catalog, "__wrapped__", get_historical_players_catalog)
+    players = catalog_fn(team_id=541, season=None)
+
+    assert players["full_name"].tolist() == ["Luka ModriÄ‡", "Vinicius Junior"]
+    vinicius = players[players["full_name"] == "Vinicius Junior"].iloc[0]
+    assert vinicius["position"] == "FW"
+    assert vinicius["nationality"] == "BRA"
+    assert vinicius["birth_date"] == "2000-01-01"
+    assert vinicius["team_name"] == "Real Madrid"
 
 
 def test_get_live_league_tables_groups_by_competition(monkeypatch):
@@ -274,3 +451,41 @@ def test_get_live_league_tables_groups_by_competition(monkeypatch):
 
     assert set(league_tables) == {"Premier League", "LaLiga"}
     assert int(league_tables["LaLiga"].iloc[0]["matchday"]) == 26
+
+
+def test_get_match_detail_normalizes_competition_and_parses_kickoff(monkeypatch):
+    monkeypatch.setattr(
+        "dashboard.data.dashboard_data._read_sql",
+        lambda query, params=None: pd.DataFrame(
+            [
+                {
+                    "match_id": 1001,
+                    "competition_id": 2014,
+                    "competition_name": "Primera Division",
+                    "season": "2025-2026",
+                    "match_date": "2025-08-20",
+                    "date_id": "2025-08-20",
+                    "kickoff_utc": "2025-08-20T19:00:00Z",
+                    "status": "FINISHED",
+                    "matchday": 2,
+                    "home_team_id": 81,
+                    "home_team": "FC Barcelona",
+                    "home_short_name": "Barca",
+                    "home_crest_url": None,
+                    "away_team_id": 86,
+                    "away_team": "Real Madrid CF",
+                    "away_short_name": "Real",
+                    "away_crest_url": None,
+                    "home_score": 2,
+                    "away_score": 1,
+                }
+            ]
+        ),
+    )
+
+    detail = get_match_detail(1001)
+
+    assert detail is not None
+    assert detail["competition_name"] == "LaLiga"
+    assert str(detail["kickoff_utc"].tz) == "UTC"
+    assert detail["home_score"] == 2

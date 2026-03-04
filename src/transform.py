@@ -139,6 +139,8 @@ def _build_mock_match_row(fixture: Record, payload: Payload, home_team: Record, 
         "away_team_id": _safe_int(away_team.get("team_id")),
         "status": fixture.get("status"),
         "matchday": fixture.get("matchday"),
+        "stage": fixture.get("stage"),
+        "group_name": fixture.get("group_name") or fixture.get("group"),
         "kickoff_utc": _parse_utc_datetime(fixture.get("kickoff_utc") or fixture.get("utc_date")),
         "season": fixture.get("season")
         or payload.get("season")
@@ -373,16 +375,22 @@ def _build_football_data_match_row(
 
     home_team = match.get("homeTeam", {})
     away_team = match.get("awayTeam", {})
+    home_team_id = _safe_int(home_team.get("id"))
+    away_team_id = _safe_int(away_team.get("id"))
+    if home_team_id == 0 or away_team_id == 0:
+        return None
     score = match.get("score", {}).get("fullTime", {})
 
     return {
         "match_id": int(match["id"]),
         "date_id": date_id,
         "competition_id": competition_id,
-        "home_team_id": int(home_team["id"]),
-        "away_team_id": int(away_team["id"]),
+        "home_team_id": home_team_id,
+        "away_team_id": away_team_id,
         "status": match.get("status"),
         "matchday": match.get("matchday"),
+        "stage": match.get("stage"),
+        "group_name": match.get("group"),
         "kickoff_utc": _parse_utc_datetime(utc_date),
         "season": season_label or _season_label_from_date_value(date_id),
         "home_score": score.get("home"),
@@ -454,7 +462,10 @@ def transform_football_data(payload: Payload) -> TransformedData:
         home_team = match.get("homeTeam", {})
         away_team = match.get("awayTeam", {})
         _update_match_teams(home_team, away_team, teams)
-        fact_matches.append(_build_football_data_match_row(match, competition_id, date_values, season_label))
+        match_row = _build_football_data_match_row(match, competition_id, date_values, season_label)
+        if match_row is None:
+            continue
+        fact_matches.append(match_row)
 
     extracted_at = _parse_utc_datetime(payload.get("extracted_at_utc"))
 
@@ -477,7 +488,9 @@ def transform_csv_to_tables(payload: Payload) -> TransformedData:
 
     date_values: set[str] = set()
     teams: dict[int, Record] = {}
+    players: dict[int, Record] = {}
     fact_matches: TableRows = []
+    player_match_stats: TableRows = []
 
     for team in payload.get("teams", []):
         team_id = _safe_int(team.get("id"))
@@ -504,6 +517,8 @@ def transform_csv_to_tables(payload: Payload) -> TransformedData:
                 "away_team_id": _safe_int(match.get("away_team_id")),
                 "status": match.get("status"),
                 "matchday": match.get("matchday"),
+                "stage": match.get("stage"),
+                "group_name": match.get("group_name") or match.get("group"),
                 "kickoff_utc": _parse_utc_datetime(match.get("kickoff_utc")),
                 "season": match.get("season") or _season_label_from_date_value(date_id),
                 "home_score": match.get("home_score"),
@@ -511,13 +526,39 @@ def transform_csv_to_tables(payload: Payload) -> TransformedData:
             }
         )
 
+    for row in payload.get("player_match_candidates", []):
+        player_id = _safe_int(row.get("player_id"))
+        if player_id == 0:
+            continue
+        players[player_id] = {
+            "player_id": player_id,
+            "full_name": row.get("player_name"),
+            "position": row.get("position"),
+            "nationality": None,
+            "birth_date": None,
+            "photo_url": None,
+            "team_id": _safe_int(row.get("team_id")),
+        }
+        player_match_stats.append(
+            {
+                "match_id": _safe_int(row.get("match_id")),
+                "player_id": player_id,
+                "minutes": max(0, min(_safe_int(row.get("minutes")), 130)),
+                "goals": max(0, _safe_int(row.get("goals"))),
+                "assists": max(0, _safe_int(row.get("assists"))),
+                "shots": max(0, _safe_int(row.get("shots"))),
+                "passes": max(0, _safe_int(row.get("passes"))),
+                "pass_accuracy": _safe_float_ratio(row.get("pass_accuracy")),
+            }
+        )
+
     return {
         "dim_date": _build_dim_date(date_values),
         "dim_team": list(teams.values()),
         "dim_competition": list(competition_rows.values()),
-        "dim_player": [],
+        "dim_player": list(players.values()),
         "fact_match": fact_matches,
-        "fact_player_match_stats": [],
+        "fact_player_match_stats": player_match_stats,
         "fact_standings_snapshot": [],
     }
 

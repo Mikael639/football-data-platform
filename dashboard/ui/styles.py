@@ -216,6 +216,143 @@ def inject_dashboard_styles() -> None:
           margin: 8px 0 14px 0;
         }
 
+        .fdp-match-visual-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 12px;
+          margin: 8px 0 16px 0;
+        }
+
+        .fdp-rank-card {
+          border: 1px solid rgba(120, 150, 190, 0.25);
+          border-radius: 18px;
+          padding: 14px 16px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(245,248,252,0.94));
+          box-shadow: 0 10px 24px rgba(19,34,56,0.06);
+        }
+
+        .fdp-rank-team {
+          font-size: 0.94rem;
+          font-weight: 700;
+          color: #15304f;
+          margin-bottom: 10px;
+        }
+
+        .fdp-rank-phase {
+          font-size: 0.68rem;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: #5f7795;
+          margin-bottom: 8px;
+          font-weight: 800;
+        }
+
+        .fdp-rank-main {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        }
+
+        .fdp-rank-pos {
+          font-size: 1.8rem;
+          font-weight: 800;
+          color: #0f2036;
+        }
+
+        .fdp-rank-delta {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 48px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 0.88rem;
+          font-weight: 700;
+          background: #edf2f8;
+          color: #334e6f;
+        }
+
+        .fdp-rank-delta-up {
+          background: rgba(31, 167, 116, 0.12);
+          color: #138553;
+        }
+
+        .fdp-rank-delta-down {
+          background: rgba(214, 75, 75, 0.12);
+          color: #c63e47;
+        }
+
+        .fdp-rank-meta {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .fdp-rank-meta-item {
+          border-radius: 12px;
+          padding: 8px 10px;
+          background: rgba(237, 242, 248, 0.9);
+        }
+
+        .fdp-rank-meta-label {
+          font-size: 0.68rem;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: #69819f;
+          margin-bottom: 4px;
+          font-weight: 700;
+        }
+
+        .fdp-rank-meta-value {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #183454;
+        }
+
+        .fdp-h2h-strip {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 10px;
+          margin: 8px 0 18px 0;
+        }
+
+        .fdp-h2h-card {
+          border: 1px solid rgba(120, 150, 190, 0.22);
+          border-radius: 16px;
+          padding: 12px 14px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(245,248,252,0.94));
+          box-shadow: 0 10px 20px rgba(19,34,56,0.05);
+        }
+
+        .fdp-h2h-date {
+          font-size: 0.75rem;
+          color: #617a98;
+          margin-bottom: 8px;
+          font-weight: 700;
+        }
+
+        .fdp-h2h-match {
+          font-size: 0.9rem;
+          color: #163252;
+          line-height: 1.45;
+          margin-bottom: 8px;
+        }
+
+        .fdp-h2h-score {
+          font-size: 1.05rem;
+          font-weight: 800;
+          color: #0f2036;
+          margin-bottom: 6px;
+        }
+
+        .fdp-h2h-meta {
+          font-size: 0.74rem;
+          color: #6b839f;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+
         .fdp-page-card {
           background: rgba(255,255,255,0.92);
           border: 1px solid var(--fdp-border);
@@ -818,7 +955,9 @@ def inject_dashboard_styles() -> None:
           .fdp-page-card-compact,
           .fdp-signal-card,
           .fdp-run-card,
-          .fdp-standings-wrap {
+          .fdp-standings-wrap,
+          .fdp-rank-card,
+          .fdp-h2h-card {
             background: linear-gradient(180deg, rgba(18,29,48,0.96), rgba(14,24,40,0.94));
             border-color: rgba(155, 184, 217, 0.24);
             box-shadow: 0 12px 28px rgba(0,0,0,0.22);
@@ -839,8 +978,29 @@ def inject_dashboard_styles() -> None:
           .fdp-signal-value,
           .fdp-page-card h3,
           .fdp-page-tile-title,
-          .fdp-run-id {
+          .fdp-run-id,
+          .fdp-rank-team,
+          .fdp-rank-pos,
+          .fdp-rank-meta-value,
+          .fdp-h2h-match,
+          .fdp-h2h-score {
             color: #f5f9ff;
+          }
+
+          .fdp-rank-phase,
+          .fdp-rank-meta-label,
+          .fdp-h2h-date,
+          .fdp-h2h-meta {
+            color: #bfd0e6;
+          }
+
+          .fdp-rank-delta {
+            background: rgba(255,255,255,0.08);
+            color: #d8e3f1;
+          }
+
+          .fdp-rank-meta-item {
+            background: rgba(255,255,255,0.05);
           }
 
           .fdp-chip {

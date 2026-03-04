@@ -5,7 +5,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from config.league_rules import get_zone_config
-from data.dashboard_data import get_live_league_form, get_live_league_tables
+from data.dashboard_data import get_live_league_form, get_live_league_tables, is_european_competition_name
 from ui.display import render_note_card, render_page_banner, render_section_heading
 from ui.styles import inject_dashboard_styles
 
@@ -487,9 +487,15 @@ def main() -> None:
         st.rerun()
 
     league_tables = get_live_league_tables()
+    league_tables = {
+        competition_name: table
+        for competition_name, table in league_tables.items()
+        if not is_european_competition_name(competition_name)
+    }
     if not league_tables:
         st.info(
-            "Aucun classement disponible en base. Relance la synchronisation des donnees pour charger la saison courante."
+            "Aucune ligue domestique disponible ici pour le moment. "
+            "Les competitions UEFA sont visibles dans l'onglet EUROPE."
         )
         return
 
