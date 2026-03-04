@@ -115,6 +115,7 @@ services:
       - dashboard
     environment:
       APP_DOMAIN: ${APP_DOMAIN}
+      TLS_EMAIL: ${TLS_EMAIL}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH}
     ports:
