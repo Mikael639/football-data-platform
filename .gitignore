@@ -137,12 +137,15 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+.env.prod
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+secrets/
+backups/
 
 #Ajuste .gitignore (pour garder le mock)
 data/raw/*

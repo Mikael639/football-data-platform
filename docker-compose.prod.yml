@@ -1,0 +1,154 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: football_postgres_prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+      POSTGRES_DB: ${POSTGRES_DB:-football_dw}
+      DB_WRITER_USER: ${DB_WRITER_USER:-pipeline_rw}
+      DB_READER_USER: ${DB_READER_USER:-dashboard_ro}
+      DB_WRITER_PASSWORD_FILE: /run/secrets/db_writer_password
+      DB_READER_PASSWORD_FILE: /run/secrets/db_reader_password
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./sql:/app-sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-postgres} -d ${POSTGRES_DB:-football_dw}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - internal
+    secrets:
+      - postgres_superuser_password
+      - db_writer_password
+      - db_reader_password
+
+  pipeline:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-football_dw}
+      DB_USER: ${DB_WRITER_USER:-pipeline_rw}
+      DB_PASSWORD_FILE: /run/secrets/db_writer_password
+      DATABASE_URL: ${DATABASE_URL:-}
+      FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
+      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-}
+      FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
+      FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON:-}
+      FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION:-PD}
+      COMPETITION_CODE: ${COMPETITION_CODE:-PD}
+      FOOTBALL_DATA_TEAM_NAME: ${FOOTBALL_DATA_TEAM_NAME:-Real Madrid CF}
+      DATA_MODE: ${DATA_MODE:-api}
+      PIPELINE_MODE: ${PIPELINE_MODE:-api}
+      LIVE_COMPETITION_CODES: ${LIVE_COMPETITION_CODES:-PD,PL,SA,BL1,FL1,CL,EL,UCL}
+      INCREMENTAL: ${INCREMENTAL:-false}
+      INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-14}
+      DQ_FRESHNESS_DAYS: ${DQ_FRESHNESS_DAYS:-7}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
+      STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
+      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
+      FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
+      FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES:-600}
+    networks:
+      - internal
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - db_writer_password
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-football_dw}
+      DB_USER: ${DB_READER_USER:-dashboard_ro}
+      DB_PASSWORD_FILE: /run/secrets/db_reader_password
+      DATABASE_URL: ${DATABASE_URL:-}
+      FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
+      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-}
+      FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
+      FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON:-}
+      FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION:-PD}
+      COMPETITION_CODE: ${COMPETITION_CODE:-PD}
+      FOOTBALL_DATA_TEAM_NAME: ${FOOTBALL_DATA_TEAM_NAME:-Real Madrid CF}
+      DATA_MODE: ${DATA_MODE:-api}
+      PIPELINE_MODE: ${PIPELINE_MODE:-api}
+      LIVE_COMPETITION_CODES: ${LIVE_COMPETITION_CODES:-PD,PL,SA,BL1,FL1,CL,EL,UCL}
+      INCREMENTAL: ${INCREMENTAL:-false}
+      INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-14}
+      DQ_FRESHNESS_DAYS: ${DQ_FRESHNESS_DAYS:-7}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
+      STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
+      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
+      FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
+    networks:
+      - internal
+    restart: always
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - db_reader_password
+
+  proxy:
+    image: caddy:2.8-alpine
+    depends_on:
+      - dashboard
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+      - internal
+    restart: always
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    internal: true
+  edge:
+
+volumes:
+  pgdata_prod:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  postgres_superuser_password:
+    file: ./secrets/postgres_superuser_password.txt
+  db_writer_password:
+    file: ./secrets/db_writer_password.txt
+  db_reader_password:
+    file: ./secrets/db_reader_password.txt

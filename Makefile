@@ -1,4 +1,4 @@
-.PHONY: up down init migrate run study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker fbref-standard-supabase-import fbref-standard-supabase-import-docker fbref-cleaned-to-manual-csv fbref-matchlogs-supabase-import fbref-matchlogs-supabase-import-docker logs psql
+.PHONY: up down init migrate run up-prod down-prod run-prod-pipeline study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker fbref-standard-supabase-import fbref-standard-supabase-import-docker fbref-cleaned-to-manual-csv fbref-matchlogs-supabase-import fbref-matchlogs-supabase-import-docker logs psql
 
 up:
 	docker compose up -d
@@ -28,6 +28,15 @@ migrate:
 
 run:
 	python -m src.run_pipeline
+
+up-prod:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres dashboard proxy
+
+down-prod:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml down
+
+run-prod-pipeline:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm pipeline
 
 study-fbref:
 	python -m src.study_fbref
