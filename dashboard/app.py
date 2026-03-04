@@ -1,215 +1,127 @@
-import os
+from __future__ import annotations
 
 import pandas as pd
-import requests
 import streamlit as st
-from sqlalchemy import text
 
-from components.main_tabs import render_clubs_tab, render_ligue_tab, render_player_details_tab, render_team_tab
-from data.dashboard_data import (
-    build_local_league_table,
-    build_team_match_view,
-    compute_team_kpis,
-    current_season_bounds,
-    current_season_label,
-    current_season_start_year_dash,
-    fetch_laliga_teams_live,
-    fetch_live_team_squad,
-    get_engine,
-    upsert_players_to_db,
-)
-from ui.labels import TAB_LABELS_MAIN
-from ui.display import (
-    laliga_logo_source,
-    render_team_hero,
-)
+from data.dashboard_data import get_competitions, get_pipeline_runs
+from ui.display import asset_image_path, laliga_logo_source
 from ui.styles import inject_dashboard_styles
 
-st.set_page_config(page_title="Football Data Platform", layout="wide")
 
-engine = get_engine()
-season_start_year = current_season_start_year_dash()
-season_start, season_end = current_season_bounds(season_start_year)
-competition_code = os.getenv("FOOTBALL_DATA_COMPETITION", "PD")
-
+st.set_page_config(page_title="APP - Football Data Platform", layout="wide")
 inject_dashboard_styles()
 
-header_left, header_right = st.columns([6.0, 1.3], vertical_alignment="center")
-with header_left:
-    st.title("Plateforme Data Football - LaLiga")
-    st.caption(f"Saison en cours utilisee partout dans le dashboard: {current_season_label(season_start_year)}")
-with header_right:
-    st.image(laliga_logo_source(), use_column_width=True)
 
-# -----------------------
-# Shared selectors / data
-# -----------------------
-teams_df, teams_live_err = fetch_laliga_teams_live(competition_code, season_start_year)
-if teams_df is None or teams_df.empty:
-    teams_df = pd.read_sql(
-        text(
-            """
-            SELECT DISTINCT t.team_id, t.team_name
-            FROM dim_team t
-            JOIN (
-              SELECT home_team_id AS team_id
-              FROM fact_match
-              WHERE date_id BETWEEN :season_start AND :season_end
-              UNION
-              SELECT away_team_id AS team_id
-              FROM fact_match
-              WHERE date_id BETWEEN :season_start AND :season_end
-            ) s ON s.team_id = t.team_id
-            ORDER BY t.team_name;
-            """
-        ),
-        engine,
-        params={"season_start": season_start, "season_end": season_end},
-    )
-if teams_df.empty:
-    teams_df = pd.read_sql("SELECT team_id, team_name FROM dim_team ORDER BY team_name;", engine)
-team_names = ["Tous les clubs"] + teams_df["team_name"].dropna().tolist()
+def _safe_run_value(runs: pd.DataFrame, column: str, fallback: str) -> str:
+    if runs.empty or column not in runs.columns:
+        return fallback
+    value = runs.iloc[0][column]
+    if pd.isna(value):
+        return fallback
+    return str(value)
 
-if "selected_team_name" not in st.session_state:
-    st.session_state["selected_team_name"] = "Tous les clubs"
-if st.session_state["selected_team_name"] not in team_names:
-    st.session_state["selected_team_name"] = "Tous les clubs"
 
-st.selectbox("Filtrer par club", team_names, key="selected_team_name")
-selected_team_name = st.session_state["selected_team_name"]
-selected_team_id = None
-if selected_team_name != "Tous les clubs":
-    selected_team_id = int(
-        teams_df.loc[teams_df["team_name"] == selected_team_name, "team_id"].iloc[0]
-    )
+def _render_hero(competitions: pd.DataFrame) -> None:
+    competition_names = ", ".join(competitions["competition_name"].dropna().astype(str).tolist()[:5]) or "Leagues"
+    left, right = st.columns([6, 1.25], vertical_alignment="center")
+    with left:
+        st.markdown(
+            f"""
+            <div class="fdp-hero">
+              <div class="fdp-home-ribbon">APP | MATCH CENTER</div>
+              <div class="fdp-hero-title">Football Data Platform</div>
+              <div class="fdp-hero-sub">
+                Hub analytique pour suivre les ligues, les clubs et la sante de la plateforme depuis une seule interface.
+              </div>
+              <div class="fdp-chip-row">
+                <span class="fdp-chip">Competitions: {competition_names}</span>
+                <span class="fdp-chip">UI first</span>
+                <span class="fdp-chip">Analytics + Live</span>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right:
+        st.image(laliga_logo_source(), width=170)
 
-matches_all_query = """
-SELECT
-  m.match_id,
-  m.date_id,
-  m.home_team_id,
-  ht.team_name AS home_team,
-  m.away_team_id,
-  at.team_name AS away_team,
-  m.home_score,
-  m.away_score
-FROM fact_match m
-JOIN dim_team ht ON ht.team_id = m.home_team_id
-JOIN dim_team at ON at.team_id = m.away_team_id
-WHERE m.date_id BETWEEN :season_start AND :season_end
-ORDER BY m.date_id DESC NULLS LAST, m.match_id DESC;
-"""
-df_matches_all_season = pd.read_sql(
-    text(matches_all_query),
-    engine,
-    params={"season_start": season_start, "season_end": season_end},
-)
-if not df_matches_all_season.empty:
-    df_matches_all_season["date_dt"] = pd.to_datetime(df_matches_all_season["date_id"], errors="coerce")
-league_local_all_season = build_local_league_table(df_matches_all_season)
 
-match_conditions = ["m.date_id BETWEEN :season_start AND :season_end"]
-match_params = {"season_start": season_start, "season_end": season_end}
-if selected_team_id is not None:
-    match_conditions.append("(m.home_team_id = :tid OR m.away_team_id = :tid)")
-    match_params["tid"] = selected_team_id
-
-matches_query = f"""
-SELECT
-  m.match_id,
-  m.date_id,
-  m.home_team_id,
-  ht.team_name AS home_team,
-  m.away_team_id,
-  at.team_name AS away_team,
-  m.home_score,
-  m.away_score
-FROM fact_match m
-JOIN dim_team ht ON ht.team_id = m.home_team_id
-JOIN dim_team at ON at.team_id = m.away_team_id
-WHERE {' AND '.join(match_conditions)}
-ORDER BY m.date_id DESC NULLS LAST, m.match_id DESC;
-"""
-df_matches = pd.read_sql(text(matches_query), engine, params=match_params)
-if not df_matches.empty:
-    df_matches["date_dt"] = pd.to_datetime(df_matches["date_id"], errors="coerce")
-
-players_query = """
-SELECT
-  p.player_id, p.full_name, p.position, p.nationality, p.birth_date,
-  p.team_id, t.team_name
-FROM dim_player p
-LEFT JOIN dim_team t ON t.team_id = p.team_id
-"""
-df_players_all = pd.read_sql(text(players_query), engine)
-
-if not df_players_all.empty:
-    df_players_all = (
-        df_players_all.sort_values(["team_name", "full_name"], ascending=[True, True])
-        .drop_duplicates(subset=["player_id"], keep="first")
-        .reset_index(drop=True)
+def _render_summary_cards(competitions: pd.DataFrame, runs: pd.DataFrame) -> None:
+    latest_status = _safe_run_value(runs, "status", "No run")
+    latest_started = _safe_run_value(runs, "started_at", "N/A")
+    latest_duration = _safe_run_value(runs, "duration_ms", "N/A")
+    st.markdown(
+        f"""
+        <div class="fdp-home-summary-grid">
+          <div class="fdp-home-summary-card">
+            <div class="fdp-home-summary-kicker">Competitions</div>
+            <div class="fdp-signal-value">{len(competitions.index)}</div>
+            <div class="fdp-signal-sub">Ligues actuellement visibles dans la plateforme.</div>
+          </div>
+          <div class="fdp-home-summary-card">
+            <div class="fdp-home-summary-kicker">Pages</div>
+            <div class="fdp-signal-value">6</div>
+            <div class="fdp-signal-sub">Overview, Team, Players, Live Leagues, Europe et Monitoring.</div>
+          </div>
+          <div class="fdp-home-summary-card">
+            <div class="fdp-home-summary-kicker">Latest Status</div>
+            <div class="fdp-signal-value">{latest_status}</div>
+            <div class="fdp-signal-sub">Dernier run: {latest_started} | Duration: {latest_duration}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-if selected_team_id is not None:
-    df_players = df_players_all[df_players_all["team_id"] == selected_team_id].copy()
-else:
-    df_players = df_players_all.copy()
 
-club_summary = (
-    teams_df.copy()
-    .merge(
-        df_players_all.groupby("team_id", dropna=True)["player_id"].nunique().rename("players_count"),
-        how="left",
-        on="team_id",
-    )
-)
-club_summary["players_count"] = club_summary["players_count"].fillna(0).astype(int)
+def _render_page_tile(
+    column: st.delta_generator.DeltaGenerator,
+    title: str,
+    description: str,
+    chips: list[str],
+    target: str,
+    image_name: str | None,
+) -> None:
+    with column:
+        image_path = asset_image_path(image_name) if image_name else None
+        chips_html = "".join(f"<span class='fdp-chip'>{chip}</span>" for chip in chips)
+        st.markdown("<div class='fdp-page-tile'>", unsafe_allow_html=True)
+        if image_path:
+            st.image(image_path, width=160)
+        st.markdown(
+            f"""
+            <div class="fdp-page-card fdp-page-card-compact">
+              <div class="fdp-page-tile-title">{title}</div>
+              <div class="fdp-page-tile-text">{description}</div>
+              <div class="fdp-chip-row">{chips_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.page_link(target, label=f"Open {title}")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-if not df_matches_all_season.empty:
-    home_cnt = df_matches_all_season.groupby("home_team_id")["match_id"].nunique()
-    away_cnt = df_matches_all_season.groupby("away_team_id")["match_id"].nunique()
-    club_summary["matches_in_scope"] = (
-        club_summary["team_id"].map(home_cnt).fillna(0) + club_summary["team_id"].map(away_cnt).fillna(0)
-    ).astype(int)
-else:
-    club_summary["matches_in_scope"] = 0
 
-club_summary["data_quality_status"] = "OK"
-club_summary.loc[
-    (club_summary["matches_in_scope"] <= 0),
-    "data_quality_status",
-] = "A_VERIFIER"
-club_summary.loc[
-    (club_summary["matches_in_scope"] > 0) & (club_summary["players_count"] <= 0),
-    "data_quality_status",
-] = "INCOMPLET"
-club_summary = club_summary.sort_values("team_name").reset_index(drop=True)
+def _render_page_cards() -> None:
+    top = st.columns(3)
+    _render_page_tile(top[0], "OVERVIEW", "Vue analytique globale pour lire les KPIs, le calendrier et le dernier classement disponible.", ["KPIs", "Calendrier", "Classement"], "pages/0_OVERVIEW.py", "Overview.png")
+    _render_page_tile(top[1], "TEAM", "Lecture club par club avec forme recente, splits domicile/exterieur et trajectoire au classement.", ["Forme", "Equipe", "Focus club"], "pages/1_TEAM.py", "Team.png")
+    _render_page_tile(top[2], "LIVE LEAGUES", "Comparateur multi-ligues pour lire la table courante de chaque championnat disponible en base.", ["Multi-leagues", "Zones UEFA", "Live snapshot"], "pages/3_LIVE_LEAGUES.py", "Live Leagues.png")
 
-tab_team, tab_standings, tab_clubs, tab_player_details = st.tabs(TAB_LABELS_MAIN)
+    bottom = st.columns(3)
+    _render_page_tile(bottom[0], "PLAYERS", "Effectif disponible en base avec les postes, nationalites et informations principales du club filtre.", ["Effectif", "Squad view", "Exploration"], "pages/2_PLAYERS.py", "Players.png")
+    _render_page_tile(bottom[1], "EUROPE", "Suivi UEFA dedie pour la Champions League, l Europa League et la Conference League.", ["UEFA", "Stages", "Fixtures"], "pages/6_EUROPE.py", None)
+    _render_page_tile(bottom[2], "MONITORING", "Sante de la plateforme: runs, qualite de donnees et indicateurs de fraicheur.", ["Runs", "DQ", "Observability"], "pages/4_MONITORING.py", "Monitoring.png")
 
-with tab_team:
-    render_team_tab(
-        selected_team_name=selected_team_name,
-        season_start_year=season_start_year,
-        df_matches=df_matches,
-        selected_team_id=selected_team_id,
-        teams_df=teams_df,
-        render_team_hero=render_team_hero,
-    )
 
-with tab_standings:
-    render_ligue_tab(
-        season_start_year=season_start_year,
-        league_local_all_season=league_local_all_season,
-        selected_team_name=selected_team_name,
-    )
+def main() -> None:
+    competitions = get_competitions()
+    runs = get_pipeline_runs(limit=5)
+    _render_hero(competitions)
+    _render_summary_cards(competitions, runs)
+    _render_page_cards()
 
-with tab_clubs:
-    render_clubs_tab(
-        league_local_all_season=league_local_all_season,
-        club_summary=club_summary,
-        engine=engine,
-    )
 
-with tab_player_details:
-    render_player_details_tab()
+if __name__ == "__main__":
+    main()
+

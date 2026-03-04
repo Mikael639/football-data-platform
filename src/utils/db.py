@@ -1,16 +1,28 @@
 import os
+from collections.abc import Mapping
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
+from src.config import Settings, get_settings
+
 load_dotenv()
 
-def get_engine() -> Engine:
-    host = os.getenv("DB_HOST", "localhost")
-    port = os.getenv("DB_PORT", "5432")
-    name = os.getenv("DB_NAME", "football_dw")
-    user = os.getenv("DB_USER", "football")
-    pwd = os.getenv("DB_PASSWORD", "football")
 
-    url = f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{name}"
-    return create_engine(url, pool_pre_ping=True)
+def build_database_url(
+    env: Mapping[str, str] | None = None,
+    settings: Settings | None = None,
+) -> str:
+    if settings is not None:
+        return settings.database_url
+    if env is not None:
+        return Settings.from_env(env).database_url
+    return get_settings().database_url
+
+
+def get_engine(
+    env: Mapping[str, str] | None = None,
+    settings: Settings | None = None,
+) -> Engine:
+    return create_engine(build_database_url(env=env, settings=settings), pool_pre_ping=True)

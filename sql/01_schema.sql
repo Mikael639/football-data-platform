@@ -6,14 +6,18 @@ CREATE TABLE pipeline_run_log (
     status VARCHAR(20),
     extracted_count INT,
     loaded_count INT,
-    error_message TEXT
+    error_message TEXT,
+    metrics_jsonb JSONB,
+    volumes_jsonb JSONB
 );
 
 -- Team dimension
 CREATE TABLE dim_team (
     team_id INT PRIMARY KEY,
     team_name VARCHAR(100),
-    country VARCHAR(100)
+    country VARCHAR(100),
+    crest_url TEXT,
+    short_name TEXT
 );
 
 -- Player dimension
@@ -49,8 +53,32 @@ CREATE TABLE fact_match (
     competition_id INT REFERENCES dim_competition(competition_id),
     home_team_id INT REFERENCES dim_team(team_id),
     away_team_id INT REFERENCES dim_team(team_id),
+    status TEXT,
+    matchday INT,
+    stage TEXT,
+    group_name TEXT,
+    kickoff_utc TIMESTAMPTZ,
+    season TEXT,
     home_score INT,
     away_score INT
+);
+
+CREATE TABLE fact_standings_snapshot (
+    competition_id INT NOT NULL REFERENCES dim_competition(competition_id),
+    season INT NOT NULL,
+    matchday INT,
+    team_id INT NOT NULL REFERENCES dim_team(team_id),
+    position INT,
+    points INT,
+    played_games INT,
+    won INT,
+    draw INT,
+    lost INT,
+    goals_for INT,
+    goals_against INT,
+    goal_difference INT,
+    snapshot_ts TIMESTAMPTZ,
+    PRIMARY KEY (competition_id, season, matchday, team_id)
 );
 
 -- Player stats fact table (player-match grain)
@@ -70,7 +98,8 @@ CREATE TABLE IF NOT EXISTS data_quality_check (
     check_id UUID PRIMARY KEY,
     run_id UUID NOT NULL REFERENCES pipeline_run_log(run_id),
     check_name VARCHAR(200) NOT NULL,
-    status VARCHAR(20) NOT NULL, -- PASS/FAIL
+    status VARCHAR(20) NOT NULL, -- PASS/WARN/FAIL
+    severity VARCHAR(20),
     metric_value FLOAT,
     threshold FLOAT,
     details TEXT,

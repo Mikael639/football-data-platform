@@ -1,148 +1,402 @@
-import os
+from __future__ import annotations
+
+import json
+import time
 import uuid
 from datetime import datetime
+from typing import Any
+
 from sqlalchemy import text
 
+from src.config import Settings, get_settings
+from src.extract import (
+    count_extracted,
+    extract_csv,
+    extract_football_data_live_competitions,
+    extract_from_mock,
+)
+from src.load import cleanup_legacy_fact_rows_for_csv, load_all, load_standings_snapshot
+from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
+from src.standings import compute_standings_snapshot
+from src.transform import count_loaded, merge_transformed_data, transform, transform_csv_to_tables, transform_football_data
 from src.utils.db import get_engine
 from src.utils.logger import get_logger
-
-from src.extract import (
-    extract_from_mock,
-    extract_football_data_laliga_all_clubs,
-    count_extracted,
-)
-from src.transform import transform, transform_football_data, count_loaded
-from src.load import load_all
-from src.quality import run_quality_checks
 
 logger = get_logger("run_pipeline")
 
 
-def main():
-    run_id = uuid.uuid4()
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def _truncate_error(message: str | None, limit: int = 1000) -> str | None:
+    if not message:
+        return None
+    if len(message) <= limit:
+        return message
+    return f"{message[: limit - 3]}..."
+
+
+def build_volume_metrics(
+    transformed: dict[str, list[dict[str, Any]]],
+    *,
+    extracted: int,
+    loaded: int,
+    computed_standings_rows: int | None = None,
+) -> dict[str, int]:
+    return {
+        "extracted_count": extracted,
+        "loaded_count": loaded,
+        "rows_dim_date": len(transformed.get("dim_date", [])),
+        "rows_dim_team": len(transformed.get("dim_team", [])),
+        "rows_dim_competition": len(transformed.get("dim_competition", [])),
+        "rows_dim_player": len(transformed.get("dim_player", [])),
+        "rows_fact_match": len(transformed.get("fact_match", [])),
+        "rows_fact_player_match_stats": len(transformed.get("fact_player_match_stats", [])),
+        "rows_fact_standings_snapshot": (
+            computed_standings_rows
+            if computed_standings_rows is not None
+            else len(transformed.get("fact_standings_snapshot", []))
+        ),
+    }
+
+
+def build_runtime_metrics(
+    settings: Settings,
+    timings_ms: dict[str, int],
+    payload: dict[str, Any] | None,
+    dq_results: list[QualityCheckResult] | None,
+) -> dict[str, Any]:
+    total_duration = sum(timings_ms.values())
+    return {
+        "mode": settings.data_mode,
+        "incremental": settings.incremental,
+        "incremental_days": settings.incremental_days if settings.incremental else None,
+        "incremental_window": (payload or {}).get("incremental_window"),
+        "extract_ms": timings_ms.get("extract_ms", 0),
+        "transform_ms": timings_ms.get("transform_ms", 0),
+        "load_ms": timings_ms.get("load_ms", 0),
+        "dq_ms": timings_ms.get("dq_ms", 0),
+        "total_duration_ms": total_duration,
+        "dq_summary": summarize_quality_results(dq_results or []),
+    }
+
+
+def build_pipeline_run_payload(
+    *,
+    settings: Settings,
+    status: str,
+    started_at: datetime,
+    ended_at: datetime | None,
+    extracted: int,
+    loaded: int,
+    timings_ms: dict[str, int],
+    transformed: dict[str, list[dict[str, Any]]] | None,
+    payload: dict[str, Any] | None,
+    dq_results: list[QualityCheckResult] | None,
+    computed_standings_rows: int | None = None,
+    error_message: str | None = None,
+) -> dict[str, Any]:
+    transformed_rows = transformed or {}
+    return {
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "status": status,
+        "extracted_count": extracted,
+        "loaded_count": loaded,
+        "error_message": _truncate_error(error_message),
+        "metrics_jsonb": json.dumps(build_runtime_metrics(settings, timings_ms, payload, dq_results)),
+        "volumes_jsonb": json.dumps(
+            build_volume_metrics(
+                transformed_rows,
+                extracted=extracted,
+                loaded=loaded,
+                computed_standings_rows=computed_standings_rows,
+            )
+        ),
+    }
+
+
+def _insert_pipeline_run_start(run_id: str, payload: dict[str, Any], engine: Any) -> None:
+    with engine.begin() as conn:
+        conn.execute(text("SELECT 1;"))
+        conn.execute(
+            text(
+                """
+                INSERT INTO pipeline_run_log (
+                    run_id,
+                    started_at,
+                    ended_at,
+                    status,
+                    extracted_count,
+                    loaded_count,
+                    error_message,
+                    metrics_jsonb,
+                    volumes_jsonb
+                )
+                VALUES (
+                    :run_id,
+                    :started_at,
+                    :ended_at,
+                    :status,
+                    :extracted_count,
+                    :loaded_count,
+                    :error_message,
+                    CAST(:metrics_jsonb AS JSONB),
+                    CAST(:volumes_jsonb AS JSONB)
+                )
+                """
+            ),
+            {
+                "run_id": run_id,
+                **payload,
+            },
+        )
+
+
+def _update_pipeline_run(run_id: str, payload: dict[str, Any], engine: Any) -> int:
+    with engine.begin() as conn:
+        return conn.execute(
+            text(
+                """
+                UPDATE pipeline_run_log
+                SET ended_at = :ended_at,
+                    status = :status,
+                    extracted_count = :extracted_count,
+                    loaded_count = :loaded_count,
+                    error_message = :error_message,
+                    metrics_jsonb = CAST(:metrics_jsonb AS JSONB),
+                    volumes_jsonb = CAST(:volumes_jsonb AS JSONB)
+                WHERE run_id = :run_id
+                """
+            ),
+            {
+                "run_id": run_id,
+                **payload,
+            },
+        ).rowcount
+
+
+def _run_extract(settings: Settings) -> tuple[dict[str, Any], int]:
+    if settings.data_mode == "mock":
+        payload = extract_from_mock()
+        return payload, count_extracted(payload)
+    if settings.data_mode == "csv":
+        payload = extract_csv(settings=settings)
+        return payload, count_extracted(payload)
+    if settings.data_mode == "hybrid":
+        csv_payload = extract_csv(settings=settings)
+        api_payloads = extract_football_data_live_competitions(settings=settings)
+        primary_api_payload = next(
+            (payload for payload in api_payloads if payload.get("competition_code") == settings.competition_code),
+            api_payloads[0],
+        )
+        payload = {
+            "source": "hybrid",
+            "csv_payload": csv_payload,
+            "api_payload": primary_api_payload,
+            "api_payloads": api_payloads,
+            "competition_code": settings.competition_code,
+            "matches": primary_api_payload.get("matches", []),
+            "match_candidates": csv_payload.get("match_candidates", []),
+            "incremental_window": primary_api_payload.get("incremental_window"),
+            "season": primary_api_payload.get("season"),
+            "standings": primary_api_payload.get("standings"),
+            "standings_matchday": primary_api_payload.get("standings_matchday"),
+        }
+        return payload, count_extracted(payload)
+
+    api_payloads = extract_football_data_live_competitions(settings=settings)
+    if len(api_payloads) == 1:
+        payload = api_payloads[0]
+    else:
+        primary_api_payload = next(
+            (item for item in api_payloads if item.get("competition_code") == settings.competition_code),
+            api_payloads[0],
+        )
+        payload = {
+            "source": "football-data.org",
+            "api_payload": primary_api_payload,
+            "api_payloads": api_payloads,
+            "competition_code": primary_api_payload.get("competition_code"),
+            "matches": primary_api_payload.get("matches", []),
+            "incremental_window": primary_api_payload.get("incremental_window"),
+            "season": primary_api_payload.get("season"),
+            "standings": primary_api_payload.get("standings"),
+            "standings_matchday": primary_api_payload.get("standings_matchday"),
+        }
+    return payload, count_extracted(payload)
+
+
+def _run_transform(settings: Settings, payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    if settings.data_mode == "mock":
+        return transform(payload)
+    if settings.data_mode == "csv":
+        return transform_csv_to_tables(payload)
+    if settings.data_mode == "hybrid":
+        csv_transformed = transform_csv_to_tables(payload["csv_payload"])
+        api_datasets = [transform_football_data(item) for item in payload.get("api_payloads", [payload["api_payload"]])]
+        return merge_transformed_data(csv_transformed, *api_datasets)
+    if "api_payloads" in payload:
+        api_datasets = [transform_football_data(item) for item in payload["api_payloads"]]
+        return merge_transformed_data(*api_datasets)
+    return transform_football_data(payload)
+
+
+def _log_incremental_mode(settings: Settings, payload: dict[str, Any] | None) -> None:
+    if settings.incremental:
+        logger.info("Incremental mode ON. window=%s", (payload or {}).get("incremental_window"))
+    else:
+        logger.info("Incremental mode OFF. Full current-season extraction enabled.")
+
+
+def _standings_scopes_from_transformed(transformed: dict[str, list[dict[str, Any]]] | None) -> list[tuple[int, str | None]]:
+    if not transformed:
+        return []
+    scopes = {
+        (
+            int(row["competition_id"]),
+            str(row["season"]).strip() if row.get("season") not in {None, ""} else None,
+        )
+        for row in transformed.get("fact_match", [])
+        if row.get("competition_id") is not None
+    }
+    return sorted(scopes)
+
+
+def main() -> None:
+    settings = get_settings()
+    settings.validate_for_pipeline()
+
+    run_id = str(uuid.uuid4())
     started_at = datetime.utcnow()
-    engine = get_engine()
+    engine = get_engine(settings=settings)
 
     extracted = 0
     loaded = 0
+    payload: dict[str, Any] | None = None
+    transformed: dict[str, list[dict[str, Any]]] | None = None
+    dq_results: list[QualityCheckResult] | None = None
+    computed_standings_rows: int | None = None
+    timings_ms = {
+        "extract_ms": 0,
+        "transform_ms": 0,
+        "load_ms": 0,
+        "dq_ms": 0,
+    }
+
+    start_payload = build_pipeline_run_payload(
+        settings=settings,
+        status="STARTED",
+        started_at=started_at,
+        ended_at=None,
+        extracted=0,
+        loaded=0,
+        timings_ms=timings_ms,
+        transformed={},
+        payload=None,
+        dq_results=[],
+        computed_standings_rows=None,
+        error_message=None,
+    )
 
     try:
         logger.info("Connecting to database...")
+        _insert_pipeline_run_start(run_id, start_payload, engine)
 
-        # Insert STARTED
-        with engine.begin() as conn:
-            conn.execute(text("SELECT 1;"))
-            conn.execute(
-                text("""
-                    INSERT INTO pipeline_run_log (
-                        run_id, started_at, status, extracted_count, loaded_count
-                    )
-                    VALUES (
-                        :run_id, :started_at, :status, :extracted_count, :loaded_count
-                    )
-                """),
-                {
-                    "run_id": str(run_id),
-                    "started_at": started_at,
-                    "status": "STARTED",
-                    "extracted_count": 0,
-                    "loaded_count": 0,
-                },
-            )
+        extract_started = time.perf_counter()
+        payload, extracted = _run_extract(settings)
+        timings_ms["extract_ms"] = _elapsed_ms(extract_started)
+        _log_incremental_mode(settings, payload)
 
-        mode = os.getenv("PIPELINE_MODE", "api").lower()
-
-        # Extract + Transform
-        if mode == "mock":
-            payload = extract_from_mock()
-            extracted = count_extracted(payload)
-            transformed = transform(payload)
-        else:
-            payload = extract_football_data_laliga_all_clubs()
-            extracted = count_extracted(payload)  # counts matches
-            transformed = transform_football_data(payload)
+        transform_started = time.perf_counter()
+        transformed = _run_transform(settings, payload)
+        timings_ms["transform_ms"] = _elapsed_ms(transform_started)
 
         planned = count_loaded(transformed)
-        logger.info(f"Rows planned to load: {planned}")
+        logger.info("Rows planned to load: %s", planned)
 
-        # Load
+        load_started = time.perf_counter()
         loaded = load_all(engine, transformed)
-        logger.info(f"Loaded rows: {loaded}")
-
-        # Quality checks
-        run_quality_checks(engine, str(run_id), allow_empty_player_stats=(mode != "mock"))
-        logger.info("Data quality checks: PASS")
-
-        # Update SUCCESS
-        ended_at = datetime.utcnow()
-        with engine.begin() as conn:
-            conn.execute(
-                text("""
-                    UPDATE pipeline_run_log
-                    SET ended_at = :ended_at,
-                        status = :status,
-                        extracted_count = :extracted_count,
-                        loaded_count = :loaded_count,
-                        error_message = NULL
-                    WHERE run_id = :run_id
-                """),
-                {
-                    "ended_at": ended_at,
-                    "status": "SUCCESS",
-                    "extracted_count": extracted,
-                    "loaded_count": loaded,
-                    "run_id": str(run_id),
-                },
+        if settings.data_mode in {"csv", "hybrid"}:
+            cleanup_counts = cleanup_legacy_fact_rows_for_csv(engine)
+            logger.info(
+                "Cleaned legacy match rows after %s load deleted_matches=%s deleted_player_match_stats=%s",
+                settings.data_mode,
+                cleanup_counts["deleted_matches"],
+                cleanup_counts["deleted_player_match_stats"],
             )
+        should_compute_standings = settings.data_mode in {"csv", "hybrid"} or not transformed.get("fact_standings_snapshot")
+        if should_compute_standings:
+            standings_result = compute_standings_snapshot(engine, scopes=_standings_scopes_from_transformed(transformed))
+            computed_standings_rows = load_standings_snapshot(
+                engine,
+                standings_result.rows,
+                scopes=standings_result.scopes,
+            )
+            loaded += computed_standings_rows
+            logger.info(
+                "Computed standings snapshot rows=%s scopes=%s ignored_null_matchday=%s",
+                computed_standings_rows,
+                len(standings_result.scopes),
+                standings_result.ignored_null_matchday_count,
+            )
+        else:
+            computed_standings_rows = len(transformed.get("fact_standings_snapshot", []))
+        timings_ms["load_ms"] = _elapsed_ms(load_started)
+        logger.info("Loaded rows: %s", loaded)
 
-        logger.info(f"Pipeline SUCCESS. run_id={run_id}")
+        dq_started = time.perf_counter()
+        dq_results = run_quality_checks(
+            engine,
+            run_id,
+            allow_empty_player_stats=(settings.data_mode != "mock"),
+            context=QualityContext(
+                data_mode=settings.data_mode,
+                freshness_days=settings.dq_freshness_days,
+                today=datetime.utcnow().date(),
+                payload=payload,
+            ),
+        )
+        timings_ms["dq_ms"] = _elapsed_ms(dq_started)
+        logger.info("Data quality checks summary: %s", summarize_quality_results(dq_results))
 
-    except Exception as e:
+        end_payload = build_pipeline_run_payload(
+            settings=settings,
+            status="SUCCESS",
+            started_at=started_at,
+            ended_at=datetime.utcnow(),
+            extracted=extracted,
+            loaded=loaded,
+            timings_ms=timings_ms,
+            transformed=transformed,
+            payload=payload,
+            dq_results=dq_results,
+            computed_standings_rows=computed_standings_rows,
+            error_message=None,
+        )
+        _update_pipeline_run(run_id, end_payload, engine)
+        logger.info("Pipeline SUCCESS. run_id=%s", run_id)
+
+    except Exception as exc:
         logger.exception("Pipeline failed")
-        ended_at = datetime.utcnow()
-
-        with engine.begin() as conn:
-            updated = conn.execute(
-                text("""
-                    UPDATE pipeline_run_log
-                    SET ended_at = :ended_at,
-                        status = :status,
-                        extracted_count = :extracted_count,
-                        loaded_count = :loaded_count,
-                        error_message = :error_message
-                    WHERE run_id = :run_id
-                """),
-                {
-                    "ended_at": ended_at,
-                    "status": "FAILED",
-                    "extracted_count": extracted,
-                    "loaded_count": loaded,
-                    "error_message": str(e),
-                    "run_id": str(run_id),
-                },
-            ).rowcount
-
-            if updated == 0:
-                conn.execute(
-                    text("""
-                        INSERT INTO pipeline_run_log (
-                            run_id, started_at, ended_at, status, extracted_count, loaded_count, error_message
-                        )
-                        VALUES (
-                            :run_id, :started_at, :ended_at, :status, :extracted_count, :loaded_count, :error_message
-                        )
-                    """),
-                    {
-                        "run_id": str(run_id),
-                        "started_at": started_at,
-                        "ended_at": ended_at,
-                        "status": "FAILED",
-                        "extracted_count": extracted,
-                        "loaded_count": loaded,
-                        "error_message": str(e),
-                    },
-                )
-
+        failed_payload = build_pipeline_run_payload(
+            settings=settings,
+            status="FAILED",
+            started_at=started_at,
+            ended_at=datetime.utcnow(),
+            extracted=extracted,
+            loaded=loaded,
+            timings_ms=timings_ms,
+            transformed=transformed,
+            payload=payload,
+            dq_results=dq_results,
+            computed_standings_rows=computed_standings_rows,
+            error_message=str(exc),
+        )
+        updated = _update_pipeline_run(run_id, failed_payload, engine)
+        if updated == 0:
+            _insert_pipeline_run_start(run_id, failed_payload, engine)
         raise
 
 

@@ -1,0 +1,3 @@
+ALTER TABLE fact_match
+    ADD COLUMN IF NOT EXISTS stage TEXT,
+    ADD COLUMN IF NOT EXISTS group_name TEXT;
