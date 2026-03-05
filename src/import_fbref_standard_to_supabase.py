@@ -6,10 +6,12 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl
 
 import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 
 from src.study_fbref import _normalize_text, _position_group, build_progression, season_label
 from src.utils.logger import get_logger
@@ -425,6 +427,48 @@ def _get_engine():
     db_url = os.getenv("SUPABASE_DB_URL") or os.getenv("STUDY_SUPABASE_DB_URL")
     if not db_url:
         raise RuntimeError("SUPABASE_DB_URL (ou STUDY_SUPABASE_DB_URL) est requis pour l'import Supabase.")
+    # Handle raw URIs where password may contain '@' and was not URL-encoded.
+    if "://" in db_url and db_url.count("@") > 1:
+        scheme, rest = db_url.split("://", 1)
+        credentials, host_part = rest.rsplit("@", 1)
+
+        if ":" in credentials:
+            username, password = credentials.split(":", 1)
+        else:
+            username, password = credentials, ""
+
+        if "/" in host_part:
+            host_port, db_and_query = host_part.split("/", 1)
+        else:
+            host_port, db_and_query = host_part, ""
+
+        if ":" in host_port:
+            host, port_raw = host_port.rsplit(":", 1)
+            try:
+                port = int(port_raw)
+            except ValueError:
+                port = None
+        else:
+            host, port = host_port, None
+
+        if "?" in db_and_query:
+            database, query_raw = db_and_query.split("?", 1)
+            query = {key: value for key, value in parse_qsl(query_raw, keep_blank_values=True)}
+        else:
+            database, query = db_and_query, {}
+
+        driver = "postgresql+psycopg2" if scheme == "postgresql" else scheme
+        safe_url = URL.create(
+            drivername=driver,
+            username=username or None,
+            password=password or None,
+            host=host or None,
+            port=port,
+            database=(database or None),
+            query=query,
+        )
+        return create_engine(safe_url, pool_pre_ping=True)
+
     return create_engine(db_url, pool_pre_ping=True)
 
 

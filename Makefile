@@ -1,4 +1,4 @@
-.PHONY: up down init migrate run study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker fbref-standard-supabase-import fbref-standard-supabase-import-docker fbref-cleaned-to-manual-csv fbref-matchlogs-supabase-import fbref-matchlogs-supabase-import-docker logs psql
+.PHONY: up down init migrate run prep-prod up-prod down-prod run-prod-pipeline smoke-prod study-fbref study-fbref-docker study-fbref-manual study-fbref-manual-docker fbref-standard-supabase-import fbref-standard-supabase-import-docker fbref-cleaned-to-manual-csv fbref-matchlogs-supabase-import fbref-matchlogs-supabase-import-docker logs psql
 
 up:
 	docker compose up -d
@@ -15,6 +15,8 @@ init:
 	docker exec -it football_postgres psql -U football -d football_dw -f /03_migrations.sql
 	docker cp sql/04_migrations.sql football_postgres:/04_migrations.sql
 	docker exec -it football_postgres psql -U football -d football_dw -f /04_migrations.sql
+	docker cp sql/07_migrations.sql football_postgres:/07_migrations.sql
+	docker exec -it football_postgres psql -U football -d football_dw -f /07_migrations.sql
 	docker cp sql/02_indexes.sql football_postgres:/02_indexes.sql
 	docker exec -it football_postgres psql -U football -d football_dw -f /02_indexes.sql
 
@@ -25,9 +27,26 @@ migrate:
 	docker exec -it football_postgres psql -U football -d football_dw -f /03_migrations.sql
 	docker cp sql/04_migrations.sql football_postgres:/04_migrations.sql
 	docker exec -it football_postgres psql -U football -d football_dw -f /04_migrations.sql
+	docker cp sql/07_migrations.sql football_postgres:/07_migrations.sql
+	docker exec -it football_postgres psql -U football -d football_dw -f /07_migrations.sql
 
 run:
 	python -m src.run_pipeline
+
+prep-prod:
+	powershell -ExecutionPolicy Bypass -File scripts/prod_prepare.ps1
+
+up-prod:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres dashboard proxy
+
+down-prod:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml down
+
+run-prod-pipeline:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm pipeline
+
+smoke-prod:
+	powershell -ExecutionPolicy Bypass -File scripts/prod_smoke_test.ps1
 
 study-fbref:
 	python -m src.study_fbref

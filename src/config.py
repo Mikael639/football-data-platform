@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Mapping
 
 DEFAULT_LIVE_COMPETITION_CODES = ("PD", "PL", "SA", "BL1", "FL1", "CL", "EL", "UCL")
@@ -63,6 +64,32 @@ def _parse_competition_codes(value: str | None, *, default_code: str) -> tuple[s
     return codes or (default_code.upper(),)
 
 
+def _read_secret_file(path: str, *, field_name: str) -> str:
+    try:
+        raw = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SettingsError(f"{field_name} could not be read from file: {path!r}") from exc
+    value = raw.strip()
+    if not value:
+        raise SettingsError(f"{field_name} secret file is empty: {path!r}")
+    return value
+
+
+def _secret_from_env(
+    source: Mapping[str, str],
+    *,
+    key: str,
+    file_key: str,
+) -> str | None:
+    direct = _first_value(source, (key,))
+    if direct:
+        return direct
+    file_path = _first_value(source, (file_key,), allow_blank=True)
+    if file_path:
+        return _read_secret_file(file_path, field_name=key)
+    return None
+
+
 @dataclass(frozen=True)
 class Settings:
     db_host: str = "localhost"
@@ -118,14 +145,22 @@ class Settings:
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
         source = os.environ if env is None else env
         data_mode = (_first_value(source, ("DATA_MODE", "PIPELINE_MODE"), "api") or "api").lower()
+        db_password = _secret_from_env(source, key="DB_PASSWORD", file_key="DB_PASSWORD_FILE")
+        football_data_token = _secret_from_env(source, key="FOOTBALL_DATA_TOKEN", file_key="FOOTBALL_DATA_TOKEN_FILE")
+        supabase_db_url = _secret_from_env(source, key="SUPABASE_DB_URL", file_key="SUPABASE_DB_URL_FILE")
+        study_supabase_db_url = _secret_from_env(
+            source,
+            key="STUDY_SUPABASE_DB_URL",
+            file_key="STUDY_SUPABASE_DB_URL_FILE",
+        )
         return cls(
             db_host=_first_value(source, ("DB_HOST",), "localhost", allow_blank=True) or "",
             db_port=_parse_int(_first_value(source, ("DB_PORT",), "5432"), field_name="DB_PORT", default=5432),
             db_name=_first_value(source, ("DB_NAME",), "football_dw", allow_blank=True) or "",
             db_user=_first_value(source, ("DB_USER",), "football", allow_blank=True) or "",
-            db_password=_first_value(source, ("DB_PASSWORD",), "football", allow_blank=True) or "",
+            db_password=db_password or (_first_value(source, ("DB_PASSWORD",), "football", allow_blank=True) or ""),
             database_url_override=_first_value(source, ("DATABASE_URL",)),
-            football_data_token=_first_value(source, ("FOOTBALL_DATA_TOKEN",)),
+            football_data_token=football_data_token,
             football_data_base_url=(
                 _first_value(source, ("FOOTBALL_DATA_BASE_URL",), "https://api.football-data.org/v4")
                 or "https://api.football-data.org/v4"
@@ -147,8 +182,8 @@ class Settings:
                 field_name="DQ_FRESHNESS_DAYS",
                 default=7,
             ),
-            supabase_db_url=_first_value(source, ("SUPABASE_DB_URL",)),
-            study_supabase_db_url=_first_value(source, ("STUDY_SUPABASE_DB_URL",)),
+            supabase_db_url=supabase_db_url,
+            study_supabase_db_url=study_supabase_db_url,
             fbref_study_backend=_first_value(source, ("FBREF_STUDY_BACKEND",), "local") or "local",
         )
 

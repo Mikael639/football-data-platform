@@ -77,18 +77,91 @@ docker compose up -d dashboard
 
 Projet adapte a un usage local/dev. Tel quel, ce n est pas un setup production internet.
 
-Points OK:
+Points deja en place dans ce repo:
 
 - `.env` est ignore par git.
-- Le token est lu via variables d environnement (pas hardcode dans le code).
+- Le token est lu via variables d environnement/fichier secret (pas hardcode dans le code).
+- Un stack prod dedie existe: `docker-compose.prod.yml` (DB non exposee, proxy HTTPS, auth, users DB separes).
 
-Points a durcir avant exposition reseau:
+## Production (mode secure)
 
-- Changer les identifiants PostgreSQL par defaut (`football/football`).
-- Ne pas exposer PostgreSQL publiquement (`5432`) hors local.
-- Mettre une authentification devant Streamlit (reverse proxy + auth).
-- Ajouter TLS si acces distant.
-- Ne jamais partager ni commiter un vrai token.
+Runbook detaille: `infra/PROD_RUNBOOK.md`.
+
+1. Copier l env prod:
+
+```powershell
+Copy-Item .env.prod.example .env.prod
+```
+
+2. Generer le hash Basic Auth:
+
+```powershell
+docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "change-me"
+```
+
+Mettre le resultat dans `BASIC_AUTH_HASH` dans `.env.prod`.
+
+3. Creer les secrets (jamais commits):
+
+- `secrets/postgres_superuser_password.txt`
+- `secrets/db_writer_password.txt`
+- `secrets/db_reader_password.txt`
+
+4. Demarrer la prod:
+
+```powershell
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres dashboard proxy
+```
+
+5. Lancer la pipeline:
+
+```powershell
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm pipeline
+```
+
+### Workflow automatise (recommande)
+
+```powershell
+make prep-prod
+make up-prod
+make run-prod-pipeline
+make smoke-prod
+```
+
+Scripts utilises:
+
+- `scripts/prod_prepare.ps1`
+- `scripts/prod_smoke_test.ps1`
+
+### Ce que fait la stack prod
+
+- PostgreSQL n expose pas le port `5432` vers l exterieur.
+- Reverse proxy Caddy devant Streamlit avec HTTPS + Basic Auth.
+- Deux users DB applicatifs:
+  - `pipeline_rw`: read/write ETL
+  - `dashboard_ro`: read-only dashboard
+- Conteneurs applicatifs en non-root + `cap_drop: ALL`.
+
+### Token football-data en prod
+
+- Chaque personne/service doit utiliser son propre token.
+- Ne jamais partager ton token personnel.
+- Recommande: injection via secret manager.
+- Supporte aussi un fichier secret avec `FOOTBALL_DATA_TOKEN_FILE`.
+
+### Backup chiffre (prod)
+
+Scripts fournis:
+
+- `scripts/backup_postgres_encrypted.sh`
+- `scripts/restore_postgres_encrypted.sh`
+
+Exemple:
+
+```bash
+export BACKUP_PASSPHRASE='change-me'
+./scripts/backup_postgres_encrypted.sh
+```
 
 ## Tests et qualite
 
@@ -97,6 +170,12 @@ pytest -q
 pre-commit run --all-files
 ```
 
+Scans securite CI:
+
+- `pip-audit` (vulnerabilites Python)
+- `trivy` (filesystem scan)
+- `dependabot` (maj automatiques)
+- `gitleaks` (secret scanning)
 ## Commandes utiles
 
 ```powershell

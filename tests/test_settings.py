@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -47,6 +48,34 @@ def test_settings_default_live_competition_codes_include_uefa():
     settings = Settings.from_env({})
 
     assert settings.live_competition_codes == ("PD", "PL", "SA", "BL1", "FL1", "CL", "EL", "UCL")
+
+
+def test_settings_reads_db_password_from_secret_file(tmp_path: Path):
+    secret_file = tmp_path / "db_password.txt"
+    secret_file.write_text("super-secret\n", encoding="utf-8")
+
+    settings = Settings.from_env(
+        {
+            "DB_HOST": "db",
+            "DB_NAME": "football_dw",
+            "DB_USER": "pipeline_rw",
+            "DB_PASSWORD_FILE": str(secret_file),
+        }
+    )
+
+    assert settings.db_password == "super-secret"
+
+
+def test_settings_raises_when_secret_file_is_missing():
+    with pytest.raises(SettingsError, match="could not be read"):
+        Settings.from_env(
+            {
+                "DB_HOST": "db",
+                "DB_NAME": "football_dw",
+                "DB_USER": "pipeline_rw",
+                "DB_PASSWORD_FILE": "/tmp/does-not-exist.txt",
+            }
+        )
 
 
 def test_incremental_window_uses_today_minus_days_plus_one():
