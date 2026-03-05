@@ -4,7 +4,6 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-
 RUN pip install --no-cache-dir --upgrade pip
 RUN useradd --create-home --uid 10001 appuser
 

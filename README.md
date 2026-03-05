@@ -176,7 +176,6 @@ Scans securite CI:
 - `trivy` (filesystem scan)
 - `dependabot` (maj automatiques)
 - `gitleaks` (secret scanning)
-
 ## Commandes utiles
 
 ```powershell
