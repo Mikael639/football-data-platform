@@ -15,6 +15,8 @@ init:
 	docker exec -it football_postgres psql -U football -d football_dw -f /03_migrations.sql
 	docker cp sql/04_migrations.sql football_postgres:/04_migrations.sql
 	docker exec -it football_postgres psql -U football -d football_dw -f /04_migrations.sql
+	docker cp sql/07_migrations.sql football_postgres:/07_migrations.sql
+	docker exec -it football_postgres psql -U football -d football_dw -f /07_migrations.sql
 	docker cp sql/02_indexes.sql football_postgres:/02_indexes.sql
 	docker exec -it football_postgres psql -U football -d football_dw -f /02_indexes.sql
 
@@ -25,6 +27,8 @@ migrate:
 	docker exec -it football_postgres psql -U football -d football_dw -f /03_migrations.sql
 	docker cp sql/04_migrations.sql football_postgres:/04_migrations.sql
 	docker exec -it football_postgres psql -U football -d football_dw -f /04_migrations.sql
+	docker cp sql/07_migrations.sql football_postgres:/07_migrations.sql
+	docker exec -it football_postgres psql -U football -d football_dw -f /07_migrations.sql
 
 run:
 	python -m src.run_pipeline
