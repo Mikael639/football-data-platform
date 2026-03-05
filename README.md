@@ -119,6 +119,20 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres da
 docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm pipeline
 ```
 
+### Workflow automatise (recommande)
+
+```powershell
+make prep-prod
+make up-prod
+make run-prod-pipeline
+make smoke-prod
+```
+
+Scripts utilises:
+
+- `scripts/prod_prepare.ps1`
+- `scripts/prod_smoke_test.ps1`
+
 ### Ce que fait la stack prod
 
 - PostgreSQL n expose pas le port `5432` vers l exterieur.
@@ -161,6 +175,7 @@ Scans securite CI:
 - `pip-audit` (vulnerabilites Python)
 - `trivy` (filesystem scan)
 - `dependabot` (maj automatiques)
+- `gitleaks` (secret scanning)
 
 ## Commandes utiles
 

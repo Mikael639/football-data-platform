@@ -1,5 +1,14 @@
 # Production Security Runbook
 
+## Go-live checklist
+
+1. Run `make prep-prod` to generate/update `.env.prod`, secrets files and auth hash.
+2. Review `.env.prod` and set real values (`APP_DOMAIN`, `TLS_EMAIL`).
+3. Start stack with `make up-prod`.
+4. Run ETL with `make run-prod-pipeline`.
+5. Validate security controls with `make smoke-prod`.
+6. Configure scheduled encrypted backups.
+
 ## 1) Secrets
 
 - Do not use plain `.env` secrets in production.
