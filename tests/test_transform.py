@@ -178,6 +178,55 @@ def test_transform_football_data_keeps_stage_and_group_name():
     assert match_row["group_name"] == "League phase"
 
 
+def test_transform_football_data_consumes_player_match_candidates():
+    payload = {
+        "season": 2025,
+        "competition_code": "PD",
+        "competition": {"id": 2014, "name": "Primera Division", "area": {"name": "Spain"}},
+        "teams": [
+            {"id": 86, "name": "Real Madrid", "shortName": "Real Madrid", "area": {"name": "Spain"}, "crest": None},
+            {"id": 81, "name": "Barcelona", "shortName": "Barcelona", "area": {"name": "Spain"}, "crest": None},
+        ],
+        "squads_by_team": [],
+        "matches": [
+            {
+                "id": 1001,
+                "utcDate": "2026-01-10T20:00:00Z",
+                "status": "FINISHED",
+                "matchday": 20,
+                "homeTeam": {"id": 86, "name": "Real Madrid", "shortName": "Real Madrid"},
+                "awayTeam": {"id": 81, "name": "Barcelona", "shortName": "Barcelona"},
+                "score": {"fullTime": {"home": 2, "away": 1}},
+            }
+        ],
+        "player_match_candidates": [
+            {
+                "match_id": 1001,
+                "player_id": 7000001,
+                "player_name": "Kylian Mbappe",
+                "position": "FW",
+                "minutes": 90,
+                "goals": 1,
+                "assists": 0,
+                "shots": 4,
+                "passes": 21,
+                "pass_accuracy": 0.84,
+                "team_id": 86,
+            }
+        ],
+        "standings": {"season": {"currentMatchday": 20}, "standings": []},
+        "extracted_at_utc": "2026-01-10T21:00:00Z",
+    }
+
+    transformed = transform_football_data(payload)
+
+    assert len(transformed["fact_player_match_stats"]) == 1
+    assert transformed["fact_player_match_stats"][0]["match_id"] == 1001
+    assert transformed["fact_player_match_stats"][0]["player_id"] == 7000001
+    assert transformed["fact_player_match_stats"][0]["minutes"] == 90
+    assert any(player["player_id"] == 7000001 for player in transformed["dim_player"])
+
+
 def test_transform_football_data_skips_matches_with_missing_team_ids():
     payload = {
         "season": 2025,

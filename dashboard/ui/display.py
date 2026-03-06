@@ -85,7 +85,7 @@ def render_team_header(team: dict[str, object] | None) -> None:
     with cols[0]:
         crest_url = team.get("crest_url")
         if crest_url:
-            st.image(str(crest_url), use_column_width=True)
+            st.image(str(crest_url), use_container_width=True)
         else:
             st.markdown(
                 f"""

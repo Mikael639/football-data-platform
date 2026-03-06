@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+from ui.adaptive_tables import render_adaptive_table
 from data.dashboard_data import (
     get_competitions,
     get_current_standings,
@@ -15,6 +16,7 @@ from data.dashboard_data import (
     split_recent_and_upcoming_matches,
 )
 from ui.display import render_note_card, render_page_banner, render_section_heading
+from ui.exports import render_csv_download
 from ui.styles import inject_dashboard_styles
 
 st.set_page_config(page_title="EUROPE - Football Data Platform", layout="wide")
@@ -735,6 +737,109 @@ def _phase_summary(matches: pd.DataFrame) -> pd.DataFrame:
     return out.rename(columns={"phase": "Phase", "status": "Status", "matches": "Matches"})
 
 
+def _group_qualification_estimate(matches: pd.DataFrame) -> pd.DataFrame:
+    if matches.empty or "group_name" not in matches.columns:
+        return pd.DataFrame()
+
+    base = matches.copy()
+    base["group_name"] = base["group_name"].fillna("").astype(str).str.strip()
+    base = base[base["group_name"] != ""]
+    if base.empty:
+        return pd.DataFrame()
+
+    finished = base.dropna(subset=["home_score", "away_score"]).copy()
+    if finished.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    for _, row in finished.iterrows():
+        home_score = int(row["home_score"])
+        away_score = int(row["away_score"])
+        home_points = 3 if home_score > away_score else 1 if home_score == away_score else 0
+        away_points = 3 if away_score > home_score else 1 if away_score == home_score else 0
+        rows.append(
+            {
+                "group_name": row["group_name"],
+                "team_id": int(row["home_team_id"]),
+                "team_name": str(row["home_team"]),
+                "played": 1,
+                "points": home_points,
+                "gf": home_score,
+                "ga": away_score,
+            }
+        )
+        rows.append(
+            {
+                "group_name": row["group_name"],
+                "team_id": int(row["away_team_id"]),
+                "team_name": str(row["away_team"]),
+                "played": 1,
+                "points": away_points,
+                "gf": away_score,
+                "ga": home_score,
+            }
+        )
+
+    group_table = pd.DataFrame(rows)
+    if group_table.empty:
+        return pd.DataFrame()
+
+    group_table = (
+        group_table.groupby(["group_name", "team_id", "team_name"], as_index=False)
+        .agg(Played=("played", "sum"), Pts=("points", "sum"), GF=("gf", "sum"), GA=("ga", "sum"))
+    )
+    group_table["GD"] = group_table["GF"] - group_table["GA"]
+
+    team_fixtures_rows: list[dict[str, object]] = []
+    for _, row in base.iterrows():
+        team_fixtures_rows.append(
+            {"group_name": row["group_name"], "team_id": int(row["home_team_id"]), "fixtures_total": 1}
+        )
+        team_fixtures_rows.append(
+            {"group_name": row["group_name"], "team_id": int(row["away_team_id"]), "fixtures_total": 1}
+        )
+    fixtures_total = (
+        pd.DataFrame(team_fixtures_rows)
+        .groupby(["group_name", "team_id"], as_index=False)["fixtures_total"]
+        .sum()
+    )
+    group_table = group_table.merge(fixtures_total, on=["group_name", "team_id"], how="left")
+    group_table["fixtures_total"] = pd.to_numeric(group_table["fixtures_total"], errors="coerce").fillna(group_table["Played"])
+    group_table["Remaining"] = (group_table["fixtures_total"] - group_table["Played"]).clip(lower=0).astype(int)
+
+    ranked_rows: list[pd.DataFrame] = []
+    for group_name, group in group_table.groupby("group_name", sort=True):
+        ranked = group.sort_values(["Pts", "GD", "GF", "team_name"], ascending=[False, False, False, True]).reset_index(drop=True)
+        ranked["Pos"] = ranked.index + 1
+        cutoff_points = int(ranked.iloc[min(1, len(ranked.index) - 1)]["Pts"])
+        ranked["margin_top2"] = ranked["Pts"] - cutoff_points
+        ranked_rows.append(ranked.assign(group_name=group_name))
+
+    ranked_table = pd.concat(ranked_rows, ignore_index=True)
+    ranked_table["Qualif %"] = ranked_table.apply(
+        lambda row: max(
+            5,
+            min(
+                95,
+                int(
+                    55
+                    + (10 if int(row["Pos"]) <= 2 else -5)
+                    + (int(row["margin_top2"]) * 9)
+                    - (max(int(row["Pos"]) - 2, 0) * 20)
+                    + (int(row["Remaining"]) * 2)
+                ),
+            ),
+        ),
+        axis=1,
+    )
+    ranked_table["Projection"] = ranked_table["Qualif %"].map(
+        lambda value: "Probable" if value >= 75 else "Jouable" if value >= 45 else "Complique"
+    )
+    return ranked_table[
+        ["group_name", "Pos", "team_name", "Pts", "Played", "Remaining", "GD", "margin_top2", "Qualif %", "Projection"]
+    ].rename(columns={"group_name": "Groupe", "team_name": "Equipe", "margin_top2": "Marge top 2"})
+
+
 def main() -> None:
     inject_dashboard_styles()
     render_page_banner(
@@ -781,6 +886,25 @@ def main() -> None:
     render_section_heading("Classement UEFA", "Affiche le dernier snapshot quand la source fournit un classement.")
     _render_standings_table(standings)
 
+    render_section_heading("Estimation qualification (groupes)")
+    st.caption("Heuristique simple basee sur points, marge top 2 et matchs restants du groupe.")
+    qualif = _group_qualification_estimate(matches)
+    if qualif.empty:
+        st.info("Pas de phase de groupes exploitable sur ce filtre pour estimer la qualification.")
+    else:
+        render_adaptive_table(
+            qualif.sort_values(["Groupe", "Pos", "Equipe"]),
+            title="Projection qualification",
+            strong_columns={"Equipe"},
+            max_height=760,
+        )
+        render_csv_download(
+            df=qualif,
+            label="Export projection qualification (CSV)",
+            filename="europe_qualification_estimate.csv",
+            key="europe_export_qualification_estimate",
+        )
+
     render_section_heading("Calendrier", "Derniers matchs joues et prochaines affiches UEFA pour la competition selectionnee.")
     left, right = st.columns(2)
     with left:
@@ -795,3 +919,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

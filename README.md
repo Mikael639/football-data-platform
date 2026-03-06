@@ -36,7 +36,14 @@ Variables importantes:
 - `FOOTBALL_DATA_TOKEN`: requis pour `api` et `hybrid`.
 - `LIVE_COMPETITION_CODES`: competitions live chargees.
 - `INCREMENTAL=true`: limite la fenetre API via `INCREMENTAL_DAYS`.
+- `PIPELINE_INTERVAL_SECONDS`: frequence auto du scheduler pipeline (defaut `1800` = 30 min).
 - `DB_*` / `DATABASE_URL`: connexion PostgreSQL.
+- `DASHBOARD_ADMIN_USERNAME` et `DASHBOARD_ADMIN_PASSWORD`: identifiants admin pour acceder a `Monitoring` et aux controles pipeline.
+- `ENRICH_PLAYER_STATS=true`: active l enrichissement des stats joueur-match.
+- `PLAYER_STATS_PROVIDER=fbref|custom_http`: provider utilise pour `fact_player_match_stats` en mode `api`/`hybrid`.
+- `PLAYER_STATS_BASE_URL`: requis si `PLAYER_STATS_PROVIDER=custom_http` (endpoint attendu: `/player-match-stats`).
+- `PLAYER_STATS_TOKEN` ou `PLAYER_STATS_TOKEN_FILE`: token optionnel transmis au provider `custom_http`.
+- `PLAYER_STATS_TIMEOUT_SEC`: timeout HTTP du provider (defaut `30`).
 
 ## Token football-data.org
 
@@ -60,8 +67,7 @@ Sans token:
 ```powershell
 docker compose up -d postgres
 make init
-docker compose run --rm pipeline python -m src.run_pipeline
-docker compose up -d dashboard
+docker compose up -d dashboard pipeline_scheduler
 ```
 
 ## Pages dashboard
@@ -72,6 +78,20 @@ docker compose up -d dashboard
 - `Live Leagues`: lecture multi-ligues.
 - `Europe`: suivi UEFA (classement, calendrier, phases).
 - `Monitoring`: runs pipeline, volumes, qualite.
+- `History`: historique des classements de fin de saison.
+- `Prediction`: baseline Poisson (1N2 + score probable).
+
+`Monitoring` est reserve a l admin via `DASHBOARD_ADMIN_USERNAME` + `DASHBOARD_ADMIN_PASSWORD`.
+
+## Alertes automatiques (pipeline)
+
+Config `.env`:
+
+- `ALERTS_ENABLED=true|false`
+- `ALERT_WEBHOOK_URL` (optionnel)
+- `ALERT_SMTP_*` (optionnel)
+
+Les alertes sont emises en cas de run failed, DQ fail/warn, anomalie de volume charge, ou fraicheur stale.
 
 ## Securite (important)
 
@@ -113,10 +133,10 @@ Mettre le resultat dans `BASIC_AUTH_HASH` dans `.env.prod`.
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres dashboard proxy
 ```
 
-5. Lancer la pipeline:
+5. Lancer le scheduler pipeline (run auto toutes les 30 minutes):
 
 ```powershell
-docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm pipeline
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d pipeline_scheduler
 ```
 
 ### Workflow automatise (recommande)

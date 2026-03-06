@@ -10,6 +10,7 @@ import pandas as pd
 import requests
 
 from src.config import Settings, get_settings
+from src.player_stats_provider import fetch_player_match_candidates
 from src.utils.logger import get_logger
 
 RAW_PATH = Path("data/raw/fixtures_mock.json")
@@ -43,10 +44,10 @@ def count_extracted(payload: dict[str, Any]) -> int:
     if "fixtures" in payload:
         return len(payload.get("fixtures", []))
     if "match_candidates" in payload:
-        return len(payload.get("match_candidates", []))
+        return len(payload.get("match_candidates", [])) + len(payload.get("player_match_candidates", []))
     # football-data payload
     if "matches" in payload:
-        return len(payload.get("matches", []))
+        return len(payload.get("matches", [])) + len(payload.get("player_match_candidates", []))
     return 0
 
 
@@ -584,6 +585,24 @@ def extract_football_data_competition(
     )
     matches = matches_payload.get("matches", [])
     standings_payload = _fetch_standings_payload(competition_code, season, token, base_url)
+    player_match_candidates: list[dict[str, Any]] = []
+    if resolved_settings.enrich_player_stats and str(competition_code).upper() == str(resolved_settings.competition_code).upper():
+        player_match_candidates = fetch_player_match_candidates(
+            provider=resolved_settings.player_stats_provider,
+            competition_code=str(competition_code),
+            season_start=int(season),
+            teams=teams,
+            matches=matches,
+            token=resolved_settings.player_stats_token,
+            base_url=resolved_settings.player_stats_base_url,
+            timeout_sec=resolved_settings.player_stats_timeout_sec,
+        )
+    elif resolved_settings.enrich_player_stats:
+        logger.warning(
+            "Player stats enrichment skipped for competition=%s provider=%s (only primary competition is enriched).",
+            competition_code,
+            resolved_settings.player_stats_provider,
+        )
 
     return {
         "source": "football-data.org",
@@ -596,6 +615,8 @@ def extract_football_data_competition(
         "matches": matches,
         "standings": standings_payload,
         "standings_matchday": (standings_payload.get("season") or {}).get("currentMatchday"),
+        "player_match_candidates": player_match_candidates,
+        "player_stats_provider": (resolved_settings.player_stats_provider if player_match_candidates else None),
         "squad_fetch_errors": squad_fetch_errors,
         "incremental_window": calculate_incremental_window(resolved_settings.incremental_days, today=today)
         if resolved_settings.incremental

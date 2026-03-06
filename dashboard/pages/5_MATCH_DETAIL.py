@@ -6,10 +6,13 @@ from data.dashboard_data import (
     get_home_away_split,
     get_match_detail,
     get_match_head_to_head,
+    get_match_player_stats,
     get_match_picker,
     get_match_ranking_context,
     get_matches,
+    get_team_xg_proxy,
 )
+from ui.adaptive_tables import render_adaptive_table
 from ui.display import render_note_card, render_page_banner, render_result_strip, render_section_heading
 from ui.styles import inject_dashboard_styles
 
@@ -237,6 +240,88 @@ def _split_row(split_df: pd.DataFrame, venue: str) -> dict[str, int | float] | N
     return matched.iloc[0].to_dict()
 
 
+def _build_event_timeline(
+    player_stats: pd.DataFrame,
+    home_team_id: int,
+    away_team_id: int,
+    home_team_name: str,
+    away_team_name: str,
+) -> pd.DataFrame:
+    if player_stats.empty:
+        return pd.DataFrame()
+
+    allowed_team_ids = {int(home_team_id), int(away_team_id)}
+    stats = player_stats.copy()
+    stats = stats[stats["team_id"].fillna(-1).astype(int).isin(allowed_team_ids)]
+    if stats.empty:
+        return pd.DataFrame()
+
+    events: list[dict[str, object]] = []
+    for _, row in stats.iterrows():
+        team_id = int(row["team_id"])
+        team_name = home_team_name if team_id == int(home_team_id) else away_team_name
+        player_name = str(row.get("full_name") or "Unknown")
+        minutes = pd.to_numeric(row.get("minutes"), errors="coerce")
+        minute_sort = int(minutes) if pd.notna(minutes) else 90
+        minute_label = f"{int(minutes)}'" if pd.notna(minutes) else "--"
+
+        goals = int(pd.to_numeric(row.get("goals"), errors="coerce") or 0)
+        assists = int(pd.to_numeric(row.get("assists"), errors="coerce") or 0)
+        if goals > 0:
+            events.append(
+                {
+                    "minute_sort": minute_sort,
+                    "Minute": minute_label,
+                    "Equipe": team_name,
+                    "Event": "But",
+                    "Joueur": player_name,
+                    "Detail": f"x{goals}" if goals > 1 else "1 but",
+                }
+            )
+        if assists > 0:
+            events.append(
+                {
+                    "minute_sort": minute_sort,
+                    "Minute": minute_label,
+                    "Equipe": team_name,
+                    "Event": "Passe dec.",
+                    "Joueur": player_name,
+                    "Detail": f"x{assists}" if assists > 1 else "1 assist",
+                }
+            )
+
+    # Proxy substitution events: low minutes usually indicate bench appearances.
+    sub_candidates = stats[
+        (pd.to_numeric(stats["minutes"], errors="coerce") > 0)
+        & (pd.to_numeric(stats["minutes"], errors="coerce") <= 30)
+        & (pd.to_numeric(stats["goals"], errors="coerce").fillna(0) == 0)
+        & (pd.to_numeric(stats["assists"], errors="coerce").fillna(0) == 0)
+    ].copy()
+    if not sub_candidates.empty:
+        sub_candidates["minutes_num"] = pd.to_numeric(sub_candidates["minutes"], errors="coerce")
+        for team_id, group in sub_candidates.groupby("team_id"):
+            for _, row in group.sort_values(["minutes_num", "full_name"]).head(2).iterrows():
+                team_id_int = int(team_id)
+                team_name = home_team_name if team_id_int == int(home_team_id) else away_team_name
+                minute_val = int(row["minutes_num"]) if pd.notna(row["minutes_num"]) else 0
+                events.append(
+                    {
+                        "minute_sort": minute_val,
+                        "Minute": f"{minute_val}'",
+                        "Equipe": team_name,
+                        "Event": "Entree (proxy)",
+                        "Joueur": str(row.get("full_name") or "Unknown"),
+                        "Detail": "Minutes faibles detectees",
+                    }
+                )
+
+    if not events:
+        return pd.DataFrame()
+
+    timeline = pd.DataFrame(events).sort_values(["minute_sort", "Equipe", "Event", "Joueur"]).reset_index(drop=True)
+    return timeline[["Minute", "Equipe", "Event", "Joueur", "Detail"]]
+
+
 def main() -> None:
     inject_dashboard_styles()
     render_page_banner(
@@ -336,6 +421,60 @@ def main() -> None:
             c2.metric("GF", int(away_row["GoalsFor"]))
             c3.metric("GA", int(away_row["GoalsAgainst"]))
 
+    render_section_heading("xG proxy comparison", "Tendance recente des deux equipes sur la saison de ce match (proxy via tirs).")
+    xg_left, xg_right = st.columns(2)
+    home_xg = get_team_xg_proxy(
+        competition_id=int(detail["competition_id"]),
+        season=str(detail["season"]),
+        team_id=int(detail["home_team_id"]),
+        limit=10,
+    )
+    away_xg = get_team_xg_proxy(
+        competition_id=int(detail["competition_id"]),
+        season=str(detail["season"]),
+        team_id=int(detail["away_team_id"]),
+        limit=10,
+    )
+    with xg_left:
+        st.caption(str(detail["home_team"]))
+        if home_xg.empty:
+            st.info("xG proxy indisponible.")
+        else:
+            st.metric("xG for moyen", f"{home_xg['xg_for'].mean():.2f}")
+            st.metric("xGA moyen", f"{home_xg['xga'].mean():.2f}")
+            st.line_chart(home_xg.set_index("match_label")[["xg_for", "xga"]])
+    with xg_right:
+        st.caption(str(detail["away_team"]))
+        if away_xg.empty:
+            st.info("xG proxy indisponible.")
+        else:
+            st.metric("xG for moyen", f"{away_xg['xg_for'].mean():.2f}")
+            st.metric("xGA moyen", f"{away_xg['xga'].mean():.2f}")
+            st.line_chart(away_xg.set_index("match_label")[["xg_for", "xga"]])
+
+    render_section_heading("Event timeline (available data)")
+    st.caption(
+        "Timeline construite depuis les stats joueurs en base (buts, assists, et entrees proxy). "
+        "Cartons et remplacements exacts ne sont pas encore disponibles."
+    )
+    player_stats = get_match_player_stats(int(selected_match_id))
+    timeline = _build_event_timeline(
+        player_stats=player_stats,
+        home_team_id=int(detail["home_team_id"]),
+        away_team_id=int(detail["away_team_id"]),
+        home_team_name=str(detail["home_team"]),
+        away_team_name=str(detail["away_team"]),
+    )
+    if timeline.empty:
+        st.info("Aucun evenement detaille disponible pour ce match.")
+    else:
+        render_adaptive_table(
+            timeline,
+            title="Timeline",
+            strong_columns={"Equipe", "Joueur"},
+            max_height=620,
+        )
+
     render_section_heading("Head-to-head", "Dernieres confrontations deja jouees entre ces deux equipes.")
     h2h = get_match_head_to_head(int(selected_match_id), limit=5)
     if h2h.empty:
@@ -370,3 +509,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -9,12 +9,14 @@ from data.dashboard_data import (
     get_matches,
     get_recent_matches,
     get_standings_curve,
+    get_team_xg_proxy,
     get_team_meta,
 )
 from state.filters import render_global_filters, require_team_selection
 from ui.charts import render_form_chart, render_home_away_chart, render_position_curve
 from ui.adaptive_tables import render_adaptive_table
 from ui.display import render_note_card, render_page_banner, render_result_strip, render_section_heading, render_team_header
+from ui.exports import render_csv_download
 from ui.styles import inject_dashboard_styles
 
 st.set_page_config(page_title="TEAM - Football Data Platform", layout="wide")
@@ -61,6 +63,21 @@ def _prepare_form_df(matches: pd.DataFrame, limit: int) -> pd.DataFrame:
     )
     form["match_label"] = form["date_dt"].dt.strftime("%m-%d")
     return form
+
+
+def _prepare_venue_form(matches: pd.DataFrame, venue: str, limit: int) -> pd.DataFrame:
+    if matches.empty:
+        return matches
+    scoped = matches[matches["venue"].astype(str).str.upper() == venue.upper()].copy()
+    if scoped.empty:
+        return scoped
+    return _prepare_form_df(scoped, limit=limit)
+
+
+def _form_points(form_df: pd.DataFrame) -> int:
+    if form_df.empty:
+        return 0
+    return int(form_df["points"].sum())
 
 
 def _format_team_calendar(df: pd.DataFrame) -> pd.DataFrame:
@@ -155,6 +172,41 @@ def main() -> None:
         st.markdown("<div class='fdp-section-title' style='margin-top:0;'>Forme 10 matchs</div>", unsafe_allow_html=True)
         render_form_chart(form10)
 
+    render_section_heading("Forme domicile vs exterieur", "Comparaison de dynamique sur 5 et 10 matchs par contexte.")
+    h5 = _prepare_venue_form(perspective, venue="Home", limit=5)
+    a5 = _prepare_venue_form(perspective, venue="Away", limit=5)
+    h10 = _prepare_venue_form(perspective, venue="Home", limit=10)
+    a10 = _prepare_venue_form(perspective, venue="Away", limit=10)
+    vh, va = st.columns(2)
+    with vh:
+        st.markdown("<div class='fdp-section-title' style='margin-top:0;'>Domicile</div>", unsafe_allow_html=True)
+        st.caption("5 derniers matchs a domicile")
+        render_result_strip(h5["result"].dropna().tolist())
+        m1, m2 = st.columns(2)
+        m1.metric("Points (5)", _form_points(h5))
+        m2.metric("Points (10)", _form_points(h10))
+    with va:
+        st.markdown("<div class='fdp-section-title' style='margin-top:0;'>Exterieur</div>", unsafe_allow_html=True)
+        st.caption("5 derniers matchs a l'exterieur")
+        render_result_strip(a5["result"].dropna().tolist())
+        m1, m2 = st.columns(2)
+        m1.metric("Points (5)", _form_points(a5))
+        m2.metric("Points (10)", _form_points(a10))
+
+    comparison = pd.DataFrame(
+        [
+            {"Contexte": "Domicile", "Points 5": _form_points(h5), "Points 10": _form_points(h10)},
+            {"Contexte": "Exterieur", "Points 5": _form_points(a5), "Points 10": _form_points(a10)},
+        ]
+    )
+    st.bar_chart(comparison.set_index("Contexte")[["Points 5", "Points 10"]])
+    render_csv_download(
+        df=comparison,
+        label="Export forme domicile/exterieur (CSV)",
+        filename="team_home_away_form_points.csv",
+        key="team_export_home_away_form",
+    )
+
     render_section_heading("Domicile / Exterieur")
     split = get_home_away_split(filters.competition_id, filters.season, filters.team_id, (filters.date_start, filters.date_end))
     if split.empty:
@@ -171,6 +223,35 @@ def main() -> None:
                 strong_columns={"GoalsFor", "GoalsAgainst", "Points"},
                 max_height=360,
             )
+        render_csv_download(
+            df=_format_goal_split(split),
+            label="Export split domicile/exterieur (CSV)",
+            filename="team_home_away_split.csv",
+            key="team_export_split",
+        )
+
+    render_section_heading("xG / xGA (proxy)", "Approximation shots-based sur les matchs termines du club.")
+    xg_proxy = get_team_xg_proxy(
+        competition_id=filters.competition_id,
+        season=filters.season,
+        team_id=filters.team_id,
+        limit=12,
+    )
+    if xg_proxy.empty:
+        st.info("xG proxy indisponible (pas assez de donnees de tirs joueurs sur ce filtre).")
+    else:
+        chart_df = xg_proxy[["match_date", "xg_for", "xga", "goals_for", "goals_against"]].copy()
+        chart_df["match_date"] = pd.to_datetime(chart_df["match_date"], errors="coerce")
+        chart_df = chart_df.dropna(subset=["match_date"]).set_index("match_date")
+        st.line_chart(chart_df[["xg_for", "xga"]])
+        st.caption("Reference score reel sur la meme periode.")
+        st.bar_chart(chart_df[["goals_for", "goals_against"]])
+        render_csv_download(
+            df=xg_proxy,
+            label="Export xG proxy (CSV)",
+            filename="team_xg_proxy.csv",
+            key="team_export_xg_proxy",
+        )
 
     render_section_heading("Calendrier", "Derniers matchs et prochaines affiches pour le club selectionne.")
     recent, upcoming = get_recent_matches(
@@ -189,24 +270,38 @@ def main() -> None:
         if recent_view.empty:
             st.info("Aucun match recent.")
         else:
+            recent_table = _format_team_calendar(recent_view)
             render_adaptive_table(
-                _format_team_calendar(recent_view),
+                recent_table,
                 title="Derniers matchs",
                 badge_columns={"status": "status", "venue": "venue", "result": "result"},
                 strong_columns={"opponent_name"},
                 max_height=760,
+            )
+            render_csv_download(
+                df=recent_table,
+                label="Export derniers matchs (CSV)",
+                filename="team_recent_matches.csv",
+                key="team_export_recent_matches",
             )
             _render_match_detail_entry(recent_view, "team_recent")
     with cal_right:
         if upcoming_view.empty:
             st.info("Aucun match a venir.")
         else:
+            upcoming_table = _format_team_calendar(upcoming_view)
             render_adaptive_table(
-                _format_team_calendar(upcoming_view),
+                upcoming_table,
                 title="Matchs a venir",
                 badge_columns={"status": "status", "venue": "venue", "result": "result"},
                 strong_columns={"opponent_name"},
                 max_height=640,
+            )
+            render_csv_download(
+                df=upcoming_table,
+                label="Export matchs a venir (CSV)",
+                filename="team_upcoming_matches.csv",
+                key="team_export_upcoming_matches",
             )
             _render_match_detail_entry(upcoming_view, "team_upcoming")
 
@@ -220,3 +315,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

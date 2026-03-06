@@ -230,11 +230,49 @@ def _venue_badge(value: object) -> tuple[str, str]:
     return (raw or "-", "fdp-pill-neutral")
 
 
+def _delta_badge(value: object) -> tuple[str, str]:
+    if pd.isna(value):
+        return ("-", "fdp-pill-neutral")
+    try:
+        delta = float(value)
+    except (TypeError, ValueError):
+        return (str(value).strip() or "-", "fdp-pill-neutral")
+
+    if delta > 0:
+        label = f"+{int(delta)}" if delta.is_integer() else f"+{delta:.2f}"
+        return (label, "fdp-pill-good")
+    if delta < 0:
+        label = f"{int(delta)}" if delta.is_integer() else f"{delta:.2f}"
+        return (label, "fdp-pill-bad")
+    return ("0", "fdp-pill-neutral")
+
+
+def _delta_position_badge(value: object) -> tuple[str, str]:
+    if pd.isna(value):
+        return ("-", "fdp-pill-neutral")
+    try:
+        delta = float(value)
+    except (TypeError, ValueError):
+        return (str(value).strip() or "-", "fdp-pill-neutral")
+
+    if delta < 0:
+        steps = abs(int(delta)) if float(delta).is_integer() else abs(delta)
+        label = f"up {steps}" if isinstance(steps, int) else f"up {steps:.2f}"
+        return (label, "fdp-pill-good")
+    if delta > 0:
+        steps = int(delta) if float(delta).is_integer() else delta
+        label = f"down {steps}" if isinstance(steps, int) else f"down {steps:.2f}"
+        return (label, "fdp-pill-bad")
+    return ("=", "fdp-pill-neutral")
+
+
 BADGE_RENDERERS: dict[str, BadgeRenderer] = {
     "status": _status_badge,
     "result": _result_badge,
     "trend": _trend_badge,
     "venue": _venue_badge,
+    "delta": _delta_badge,
+    "delta_position": _delta_position_badge,
 }
 
 
