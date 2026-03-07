@@ -371,7 +371,7 @@ def render_clubs_tab(
         "Clique sur un club pour ouvrir la page Joueurs (Streamlit multipage) "
         "avec l'effectif du club."
     )
-    st.page_link("pages/3_Joueurs.py", label="Ouvrir la page Joueurs")
+    st.page_link("pages/2_PLAYERS.py", label="Ouvrir la page Joueurs")
 
     if not league_local_all_season.empty:
         st.subheader("Top clubs (KPI locaux - saison courante)")
@@ -453,7 +453,7 @@ def render_clubs_tab(
                 ):
                     st.session_state["players_selected_team_name"] = club["team_name"]
                     st.session_state["players_selected_team_id"] = int(club["team_id"])
-                    st.switch_page("pages/3_Joueurs.py")
+                    st.switch_page("pages/2_PLAYERS.py")
 
 
 # Override de la version precedente: vue multi-ligues (LaLiga / Premier League / Serie A)
@@ -666,7 +666,7 @@ def render_player_details_tab() -> None:
     st.caption(
         "Exploitation des donnees joueurs: filtres dynamiques, comparaison inter-saisons et profils objectifs."
     )
-    st.page_link("pages/3_Joueurs.py", label="Ouvrir la page Joueurs detaillee")
+    st.page_link("pages/2_PLAYERS.py", label="Ouvrir la page Joueurs detaillee")
 
     settings = get_settings()
     supabase_db_url = settings.supabase_db_url or settings.study_supabase_db_url

@@ -112,8 +112,8 @@ def _render_page_tile(
 
 def _render_page_cards(*, is_admin: bool) -> None:
     top = st.columns(3)
-    _render_page_tile(top[0], "OVERVIEW", "Vue analytique globale pour lire les KPIs, le calendrier et le dernier classement disponible.", ["KPIs", "Calendrier", "Classement"], "pages/0_OVERVIEW.py", "Overview.png")
-    _render_page_tile(top[1], "TEAM", "Lecture club par club avec forme recente, splits domicile/exterieur et trajectoire au classement.", ["Forme", "Equipe", "Focus club"], "pages/1_TEAM.py", "Team.png")
+    _render_page_tile(top[0], "OVERVIEW", "Vue analytique globale pour lire les KPIs, le calendrier et le dernier classement disponible.", ["KPIs", "Calendrier", "Classement"], "pages/0_Overview.py", "Overview.png")
+    _render_page_tile(top[1], "TEAM", "Lecture club par club avec forme recente, splits domicile/exterieur et trajectoire au classement.", ["Forme", "Equipe", "Focus club"], "pages/1_Team.py", "Team.png")
     _render_page_tile(top[2], "LIVE LEAGUES", "Comparateur multi-ligues pour lire la table courante de chaque championnat disponible en base.", ["Multi-leagues", "Zones UEFA", "Live snapshot"], "pages/3_LIVE_LEAGUES.py", "Live Leagues.png")
 
     if is_admin:
