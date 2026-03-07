@@ -31,6 +31,14 @@ def inject_dashboard_styles() -> None:
             linear-gradient(180deg, #f7f9fd 0%, #eef3fa 100%);
         }
 
+        .main .block-container {
+          max-width: 100%;
+          padding-top: 1.25rem;
+          padding-right: 1.75rem;
+          padding-bottom: 1.5rem;
+          padding-left: 1.75rem;
+        }
+
         section[data-testid="stSidebar"] {
           background: linear-gradient(180deg, #f6f8fc 0%, #eef3fa 100%);
           border-right: 1px solid #d9e2ef;
@@ -39,6 +47,33 @@ def inject_dashboard_styles() -> None:
         section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a p,
         section[data-testid="stSidebar"] [data-testid="stSidebarNav"] button p {
           color: #2a3f5b !important;
+        }
+
+        section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a {
+          border-radius: 12px;
+          margin: 2px 6px;
+          padding: 4px 6px;
+          transition: all 0.16s ease;
+        }
+
+        section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a:hover {
+          background: rgba(14, 111, 255, 0.08);
+        }
+
+        section[data-testid="stSidebar"] [data-testid="stSidebarNav"] [aria-current="page"] {
+          background: rgba(14, 111, 255, 0.12);
+          border: 1px solid rgba(14, 111, 255, 0.25);
+        }
+
+        section[data-testid="stSidebar"] .stExpander {
+          border: 1px solid #d9e2ef !important;
+          border-radius: 12px !important;
+          background: rgba(255,255,255,0.65) !important;
+        }
+
+        section[data-testid="stSidebar"] .stExpander details summary p {
+          font-weight: 700 !important;
+          letter-spacing: 0.02em;
         }
 
         section[data-testid="stSidebar"] h1,
@@ -924,6 +959,15 @@ def inject_dashboard_styles() -> None:
             font-weight: 700 !important;
           }
 
+          section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a:hover {
+            background: rgba(84,166,255,0.18);
+          }
+
+          section[data-testid="stSidebar"] [data-testid="stSidebarNav"] [aria-current="page"] {
+            background: rgba(84,166,255,0.24);
+            border: 1px solid rgba(84,166,255,0.36);
+          }
+
           section[data-testid="stSidebar"] [aria-selected="true"] p,
           section[data-testid="stSidebar"] [aria-selected="true"] span {
             color: #ffffff !important;
@@ -947,6 +991,11 @@ def inject_dashboard_styles() -> None:
             color: #cfe0f5 !important;
             font-weight: 700 !important;
             opacity: 1 !important;
+          }
+
+          section[data-testid="stSidebar"] .stExpander {
+            border-color: rgba(155, 184, 217, 0.24) !important;
+            background: rgba(15, 26, 43, 0.75) !important;
           }
 
           .fdp-note-card,
@@ -1058,7 +1107,81 @@ def inject_dashboard_styles() -> None:
           }
         }
 
-        @media (max-width: 900px) {
+        @media (min-width: 1025px) and (max-width: 1240px) and (orientation: landscape) {
+          .main .block-container {
+            padding-right: 1rem;
+            padding-left: 1rem;
+          }
+
+          div[data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap;
+            gap: 0.9rem;
+          }
+
+          div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: auto !important;
+            min-width: 280px !important;
+            flex: 1 1 280px !important;
+          }
+
+          .fdp-home-summary-grid,
+          .fdp-run-list {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
+        @media (min-width: 768px) and (max-width: 1024px), (min-width: 768px) and (max-width: 1240px) and (orientation: portrait) {
+          .main .block-container {
+            padding-right: 0.9rem;
+            padding-left: 0.9rem;
+          }
+
+          div[data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap;
+            gap: 0.85rem;
+          }
+
+          div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: calc(50% - 0.425rem) !important;
+            min-width: calc(50% - 0.425rem) !important;
+            flex: 1 1 calc(50% - 0.425rem) !important;
+          }
+
+          .fdp-hero,
+          .fdp-page-banner {
+            padding: 18px 20px;
+            border-radius: 20px;
+          }
+
+          .fdp-home-summary-grid,
+          .fdp-run-list {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .fdp-standings-wrap,
+          div[data-testid="stDataFrame"] {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .main .block-container {
+            padding-right: 0.8rem;
+            padding-left: 0.8rem;
+          }
+
+          div[data-testid="stHorizontalBlock"] {
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            width: 100% !important;
+            min-width: 0 !important;
+            flex: 1 1 100% !important;
+          }
+
           .fdp-hero,
           .fdp-page-banner {
             padding: 16px 18px;
@@ -1093,6 +1216,20 @@ def inject_dashboard_styles() -> None:
             grid-template-columns: 1fr;
           }
 
+          .fdp-standings-wrap,
+          div[data-testid="stDataFrame"] {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .fdp-standings-table {
+            min-width: 680px;
+          }
+
+          div[data-testid="stPageLink"] a {
+            width: 100%;
+          }
+
           .fdp-page-card h3 {
             font-size: 0.96rem;
           }
@@ -1108,3 +1245,20 @@ def inject_dashboard_styles() -> None:
         """,
         unsafe_allow_html=True,
     )
+    if not bool(st.session_state.get("fdp_admin_authenticated", False)):
+        st.markdown(
+            """
+            <style>
+            section[data-testid="stSidebar"] [data-testid="stSidebarNav"] > div:first-child {
+              display: none !important;
+            }
+            section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[href*="MONITORING"],
+            section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[href*="monitoring"],
+            section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[href*="4_MONITORING"],
+            section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[href*="4_monitoring"] {
+              display: none !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )

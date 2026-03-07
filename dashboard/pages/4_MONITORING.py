@@ -6,7 +6,10 @@ import pandas as pd
 import streamlit as st
 
 from data.dashboard_data import get_dq_checks, get_pipeline_runs
+from services.pipeline_control import get_pipeline_process_status, read_pipeline_log_tail, start_pipeline_process
+from state.admin_access import render_admin_access_sidebar, require_admin_access
 from ui.display import render_badge, render_note_card, render_page_banner, render_section_heading, render_status_badge, style_monitoring_table
+from ui.exports import render_csv_download
 from ui.styles import inject_dashboard_styles
 
 st.set_page_config(page_title="MONITORING - Football Data Platform", layout="wide")
@@ -134,6 +137,102 @@ def _render_summary_metrics(summary: dict[str, Any]) -> None:
                 st.caption(subtext)
 
 
+def _safe_int(value: Any) -> int:
+    if value is None or pd.isna(value):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _render_run_diff(runs: pd.DataFrame) -> None:
+    render_section_heading("Run diff", "Comparaison rapide: dernier run vs run precedent.")
+    if len(runs.index) < 2:
+        st.info("Pas assez de runs pour comparer (minimum 2).")
+        return
+
+    latest = runs.iloc[0]
+    previous = runs.iloc[1]
+    latest_volumes = latest.get("volumes", {}) or {}
+    previous_volumes = previous.get("volumes", {}) or {}
+
+    loaded_latest = _safe_int(latest.get("loaded_count"))
+    loaded_prev = _safe_int(previous.get("loaded_count"))
+    extracted_latest = _safe_int(latest.get("extracted_count"))
+    extracted_prev = _safe_int(previous.get("extracted_count"))
+    duration_latest = _safe_int(latest.get("duration_ms"))
+    duration_prev = _safe_int(previous.get("duration_ms"))
+    match_rows_latest = _safe_int(latest_volumes.get("rows_fact_match"))
+    match_rows_prev = _safe_int(previous_volumes.get("rows_fact_match"))
+    standings_rows_latest = _safe_int(latest_volumes.get("rows_fact_standings_snapshot"))
+    standings_rows_prev = _safe_int(previous_volumes.get("rows_fact_standings_snapshot"))
+
+    delta_loaded = loaded_latest - loaded_prev
+    delta_extracted = extracted_latest - extracted_prev
+    delta_duration_ms = duration_latest - duration_prev
+    delta_match_rows = match_rows_latest - match_rows_prev
+    delta_standings_rows = standings_rows_latest - standings_rows_prev
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Loaded", loaded_latest, delta_loaded)
+    c2.metric("Extracted", extracted_latest, delta_extracted)
+    c3.metric("Duration", _format_duration_ms(duration_latest), _format_duration_ms(delta_duration_ms))
+    c4.metric("Rows fact_match", match_rows_latest, delta_match_rows)
+    c5.metric("Rows standings", standings_rows_latest, delta_standings_rows)
+    c6.metric("Status", str(latest.get("status")), f"prev: {str(previous.get('status'))}")
+
+    diff_df = pd.DataFrame(
+        [
+            {"Metric": "loaded_count", "latest": loaded_latest, "previous": loaded_prev, "delta": delta_loaded},
+            {"Metric": "extracted_count", "latest": extracted_latest, "previous": extracted_prev, "delta": delta_extracted},
+            {"Metric": "duration_ms", "latest": duration_latest, "previous": duration_prev, "delta": delta_duration_ms},
+            {"Metric": "rows_fact_match", "latest": match_rows_latest, "previous": match_rows_prev, "delta": delta_match_rows},
+            {
+                "Metric": "rows_fact_standings_snapshot",
+                "latest": standings_rows_latest,
+                "previous": standings_rows_prev,
+                "delta": delta_standings_rows,
+            },
+        ]
+    )
+    render_csv_download(
+        df=diff_df,
+        label="Export run diff (CSV)",
+        filename="monitoring_run_diff.csv",
+        key="monitoring_export_run_diff",
+    )
+
+
+def _render_pipeline_control() -> None:
+    render_section_heading("Pipeline control", "Lance une execution pipeline en arriere-plan depuis cette app.")
+    status = get_pipeline_process_status()
+    c1, c2, c3 = st.columns([1, 1, 2])
+    c1.metric("Process", "Running" if status["running"] else "Idle")
+    c2.metric("PID", "-" if status["pid"] is None else str(status["pid"]))
+    with c3:
+        run_clicked = st.button(
+            "Lancer pipeline maintenant",
+            key="monitoring_launch_pipeline",
+            disabled=bool(status["running"]),
+            type="primary",
+        )
+        refresh_clicked = st.button("Rafraichir statut", key="monitoring_refresh_pipeline_status")
+
+    if run_clicked:
+        start_result = start_pipeline_process()
+        if start_result.get("started"):
+            st.success(f"Pipeline lancee en background (pid={start_result['pid']}).")
+        else:
+            st.warning("Une pipeline est deja en cours.")
+        st.rerun()
+    if refresh_clicked:
+        st.rerun()
+
+    with st.expander("Logs pipeline (tail)"):
+        st.code(read_pipeline_log_tail(max_lines=120), language="text")
+
+
 def _render_simple_explanation(summary: dict[str, Any]) -> None:
     latest_run = summary["latest_run"]
     status = str(latest_run["status"])
@@ -163,6 +262,12 @@ def _render_alerts(dq_checks: pd.DataFrame) -> None:
     alert_view = alerts[["status", "check_name", "details", "created_at"]].copy()
     alert_view["created_at"] = alert_view["created_at"].map(_format_timestamp)
     st.dataframe(style_monitoring_table(alert_view), hide_index=True, use_container_width=True)
+    render_csv_download(
+        df=alert_view,
+        label="Export alertes (CSV)",
+        filename="monitoring_alerts.csv",
+        key="monitoring_export_alerts",
+    )
 
 
 def _render_recent_runs_gallery(runs: pd.DataFrame) -> None:
@@ -222,6 +327,14 @@ def _render_run_details(runs: pd.DataFrame) -> str:
         ],
         hide_index=True,
         use_container_width=True,
+    )
+    render_csv_download(
+        df=runs_display[
+            ["run_id", "started_at", "ended_at", "status", "duration", "extracted_count", "loaded_count", "volumes_jsonb"]
+        ],
+        label="Export runs (CSV)",
+        filename="monitoring_runs.csv",
+        key="monitoring_export_runs",
     )
 
     return st.selectbox("Run to inspect", runs["run_id"].astype(str).tolist())
@@ -311,6 +424,12 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
         hide_index=True,
         use_container_width=True,
     )
+    render_csv_download(
+        df=dq_display[["created_at", "check_name", "status", "severity", "metric_value", "threshold", "details"]],
+        label="Export quality checks (CSV)",
+        filename=f"monitoring_dq_{run_id[:8]}.csv",
+        key=f"monitoring_export_dq_{run_id}",
+    )
 
     with st.expander("Raw technical payload"):
         st.code(_format_json(metrics), language="json")
@@ -319,12 +438,16 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
 
 def main() -> None:
     inject_dashboard_styles()
+    render_admin_access_sidebar("monitoring")
     render_page_banner(
         "MONITORING",
         "Health page for the data platform: start with the summary, then open the technical details if needed.",
         "Monitoring.png",
     )
+    if not require_admin_access("MONITORING"):
+        return
     render_note_card("Monitoring sert a confirmer que les donnees affichees dans le dashboard sont fraiches, chargees et controlees.")
+    _render_pipeline_control()
 
     if st.button("Refresh"):
         st.cache_data.clear()
@@ -343,6 +466,7 @@ def main() -> None:
     with summary_tab:
         _render_health_hero(summary)
         _render_summary_metrics(summary)
+        _render_run_diff(runs)
         _render_simple_explanation(summary)
         _render_alerts(latest_checks)
         _render_recent_runs_gallery(runs)
@@ -354,3 +478,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

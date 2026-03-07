@@ -440,6 +440,39 @@ def _extract_standings_snapshot(
     return rows
 
 
+def _append_player_match_candidates(
+    *,
+    players: dict[int, Record],
+    player_match_stats: TableRows,
+    candidates: list[Record],
+) -> None:
+    for row in candidates:
+        player_id = _safe_int(row.get("player_id"))
+        if player_id == 0:
+            continue
+        players[player_id] = {
+            "player_id": player_id,
+            "full_name": row.get("player_name"),
+            "position": row.get("position"),
+            "nationality": None,
+            "birth_date": None,
+            "photo_url": None,
+            "team_id": _safe_int(row.get("team_id")),
+        }
+        player_match_stats.append(
+            {
+                "match_id": _safe_int(row.get("match_id")),
+                "player_id": player_id,
+                "minutes": max(0, min(_safe_int(row.get("minutes")), 130)),
+                "goals": max(0, _safe_int(row.get("goals"))),
+                "assists": max(0, _safe_int(row.get("assists"))),
+                "shots": max(0, _safe_int(row.get("shots"))),
+                "passes": max(0, _safe_int(row.get("passes"))),
+                "pass_accuracy": _safe_float_ratio(row.get("pass_accuracy")),
+            }
+        )
+
+
 def transform_football_data(payload: Payload) -> TransformedData:
     matches = payload.get("matches", [])
     competition_meta = payload.get("competition", {}) or {}
@@ -458,6 +491,7 @@ def transform_football_data(payload: Payload) -> TransformedData:
     _load_players_from_legacy_squad(payload, players)
 
     fact_matches: TableRows = []
+    player_match_stats: TableRows = []
     for match in matches:
         home_team = match.get("homeTeam", {})
         away_team = match.get("awayTeam", {})
@@ -466,6 +500,11 @@ def transform_football_data(payload: Payload) -> TransformedData:
         if match_row is None:
             continue
         fact_matches.append(match_row)
+    _append_player_match_candidates(
+        players=players,
+        player_match_stats=player_match_stats,
+        candidates=payload.get("player_match_candidates", []),
+    )
 
     extracted_at = _parse_utc_datetime(payload.get("extracted_at_utc"))
 
@@ -475,7 +514,7 @@ def transform_football_data(payload: Payload) -> TransformedData:
         "dim_competition": list(competitions.values()),
         "dim_player": list(players.values()),
         "fact_match": fact_matches,
-        "fact_player_match_stats": [],
+        "fact_player_match_stats": player_match_stats,
         "fact_standings_snapshot": _extract_standings_snapshot(payload, competition_id, extracted_at),
     }
 
@@ -526,31 +565,11 @@ def transform_csv_to_tables(payload: Payload) -> TransformedData:
             }
         )
 
-    for row in payload.get("player_match_candidates", []):
-        player_id = _safe_int(row.get("player_id"))
-        if player_id == 0:
-            continue
-        players[player_id] = {
-            "player_id": player_id,
-            "full_name": row.get("player_name"),
-            "position": row.get("position"),
-            "nationality": None,
-            "birth_date": None,
-            "photo_url": None,
-            "team_id": _safe_int(row.get("team_id")),
-        }
-        player_match_stats.append(
-            {
-                "match_id": _safe_int(row.get("match_id")),
-                "player_id": player_id,
-                "minutes": max(0, min(_safe_int(row.get("minutes")), 130)),
-                "goals": max(0, _safe_int(row.get("goals"))),
-                "assists": max(0, _safe_int(row.get("assists"))),
-                "shots": max(0, _safe_int(row.get("shots"))),
-                "passes": max(0, _safe_int(row.get("passes"))),
-                "pass_accuracy": _safe_float_ratio(row.get("pass_accuracy")),
-            }
-        )
+    _append_player_match_candidates(
+        players=players,
+        player_match_stats=player_match_stats,
+        candidates=payload.get("player_match_candidates", []),
+    )
 
     return {
         "dim_date": _build_dim_date(date_values),

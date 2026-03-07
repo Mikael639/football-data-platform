@@ -50,6 +50,51 @@ def test_settings_default_live_competition_codes_include_uefa():
     assert settings.live_competition_codes == ("PD", "PL", "SA", "BL1", "FL1", "CL", "EL", "UCL")
 
 
+def test_settings_parses_player_stats_enrichment_flags():
+    settings = Settings.from_env(
+        {
+            "ENRICH_PLAYER_STATS": "true",
+            "PLAYER_STATS_PROVIDER": "fbref",
+        }
+    )
+
+    assert settings.enrich_player_stats is True
+    assert settings.player_stats_provider == "fbref"
+
+
+def test_settings_parses_custom_player_stats_provider_fields(tmp_path: Path):
+    token_file = tmp_path / "player_stats_token.txt"
+    token_file.write_text("player-token\n", encoding="utf-8")
+
+    settings = Settings.from_env(
+        {
+            "ENRICH_PLAYER_STATS": "true",
+            "PLAYER_STATS_PROVIDER": "custom_http",
+            "PLAYER_STATS_BASE_URL": "https://player-stats.example.test",
+            "PLAYER_STATS_TIMEOUT_SEC": "45",
+            "PLAYER_STATS_TOKEN_FILE": str(token_file),
+        }
+    )
+
+    assert settings.player_stats_provider == "custom_http"
+    assert settings.player_stats_base_url == "https://player-stats.example.test"
+    assert settings.player_stats_timeout_sec == 45
+    assert settings.player_stats_token == "player-token"
+
+
+def test_settings_validation_requires_base_url_for_custom_http():
+    settings = Settings.from_env(
+        {
+            "DATA_MODE": "mock",
+            "ENRICH_PLAYER_STATS": "true",
+            "PLAYER_STATS_PROVIDER": "custom_http",
+        }
+    )
+
+    with pytest.raises(SettingsError, match="PLAYER_STATS_BASE_URL"):
+        settings.validate_for_pipeline()
+
+
 def test_settings_reads_db_password_from_secret_file(tmp_path: Path):
     secret_file = tmp_path / "db_password.txt"
     secret_file.write_text("super-secret\n", encoding="utf-8")

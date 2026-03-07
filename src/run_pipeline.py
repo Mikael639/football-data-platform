@@ -16,6 +16,7 @@ from src.extract import (
     extract_from_mock,
 )
 from src.load import cleanup_legacy_fact_rows_for_csv, load_all, load_standings_snapshot
+from src.alerts import dispatch_pipeline_alert
 from src.quality import QualityCheckResult, QualityContext, run_quality_checks, summarize_quality_results
 from src.standings import compute_standings_snapshot
 from src.transform import count_loaded, merge_transformed_data, transform, transform_csv_to_tables, transform_football_data
@@ -264,6 +265,97 @@ def _standings_scopes_from_transformed(transformed: dict[str, list[dict[str, Any
     return sorted(scopes)
 
 
+def _season_start_from_label(season_label: str | None) -> int | None:
+    if season_label in {None, ""}:
+        return None
+    text_value = str(season_label).strip()
+    if not text_value:
+        return None
+    try:
+        return int(text_value.split("-", 1)[0])
+    except ValueError:
+        return None
+
+
+def _existing_standings_scopes(
+    engine: Any,
+    scopes: list[tuple[int, str | None]],
+) -> set[tuple[int, int]]:
+    existing: set[tuple[int, int]] = set()
+    if not scopes:
+        return existing
+
+    with engine.begin() as conn:
+        for competition_id, season_label in scopes:
+            season_start = _season_start_from_label(season_label)
+            if season_start is None:
+                continue
+            row = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM fact_standings_snapshot
+                    WHERE competition_id = :competition_id
+                      AND season = :season
+                    LIMIT 1
+                    """
+                ),
+                {"competition_id": int(competition_id), "season": int(season_start)},
+            ).first()
+            if row is not None:
+                existing.add((int(competition_id), int(season_start)))
+    return existing
+
+
+def _api_standings_scopes_from_transformed(transformed: dict[str, list[dict[str, Any]]] | None) -> set[tuple[int, int]]:
+    if not transformed:
+        return set()
+    scopes: set[tuple[int, int]] = set()
+    for row in transformed.get("fact_standings_snapshot", []):
+        competition_id = row.get("competition_id")
+        season = row.get("season")
+        if competition_id is None or season is None:
+            continue
+        try:
+            scopes.add((int(competition_id), int(season)))
+        except (TypeError, ValueError):
+            continue
+    return scopes
+
+
+def _resolve_standings_scopes_to_compute(
+    *,
+    settings: Settings,
+    engine: Any,
+    transformed: dict[str, list[dict[str, Any]]] | None,
+) -> list[tuple[int, str | None]]:
+    match_scopes = _standings_scopes_from_transformed(transformed)
+    if not match_scopes:
+        return []
+
+    if settings.data_mode == "csv":
+        return match_scopes
+
+    if settings.data_mode == "hybrid":
+        api_scopes = _api_standings_scopes_from_transformed(transformed)
+        existing_scopes = _existing_standings_scopes(engine, match_scopes)
+        fallback_scopes: list[tuple[int, str | None]] = []
+        for competition_id, season_label in match_scopes:
+            season_start = _season_start_from_label(season_label)
+            if season_start is None:
+                fallback_scopes.append((competition_id, season_label))
+                continue
+            scope_key = (int(competition_id), int(season_start))
+            if scope_key in api_scopes or scope_key in existing_scopes:
+                continue
+            fallback_scopes.append((competition_id, season_label))
+        return fallback_scopes
+
+    if transformed and transformed.get("fact_standings_snapshot"):
+        return []
+    return match_scopes
+
+
 def main() -> None:
     settings = get_settings()
     settings.validate_for_pipeline()
@@ -326,9 +418,13 @@ def main() -> None:
                 cleanup_counts["deleted_matches"],
                 cleanup_counts["deleted_player_match_stats"],
             )
-        should_compute_standings = settings.data_mode in {"csv", "hybrid"} or not transformed.get("fact_standings_snapshot")
-        if should_compute_standings:
-            standings_result = compute_standings_snapshot(engine, scopes=_standings_scopes_from_transformed(transformed))
+        standings_scopes = _resolve_standings_scopes_to_compute(
+            settings=settings,
+            engine=engine,
+            transformed=transformed,
+        )
+        if standings_scopes:
+            standings_result = compute_standings_snapshot(engine, scopes=standings_scopes)
             computed_standings_rows = load_standings_snapshot(
                 engine,
                 standings_result.rows,
@@ -376,6 +472,15 @@ def main() -> None:
             error_message=None,
         )
         _update_pipeline_run(run_id, end_payload, engine)
+        dispatch_pipeline_alert(
+            engine=engine,
+            run_id=run_id,
+            status="SUCCESS",
+            loaded_count=loaded,
+            dq_results=dq_results,
+            freshness_days=settings.dq_freshness_days,
+            error_message=None,
+        )
         logger.info("Pipeline SUCCESS. run_id=%s", run_id)
 
     except Exception as exc:
@@ -397,6 +502,18 @@ def main() -> None:
         updated = _update_pipeline_run(run_id, failed_payload, engine)
         if updated == 0:
             _insert_pipeline_run_start(run_id, failed_payload, engine)
+        try:
+            dispatch_pipeline_alert(
+                engine=engine,
+                run_id=run_id,
+                status="FAILED",
+                loaded_count=loaded,
+                dq_results=dq_results,
+                freshness_days=settings.dq_freshness_days,
+                error_message=str(exc),
+            )
+        except Exception:
+            logger.exception("Alert dispatch failed in exception path")
         raise
 
 

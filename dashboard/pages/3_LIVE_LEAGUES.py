@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 from config.league_rules import get_zone_config
 from data.dashboard_data import get_live_league_form, get_live_league_tables, is_european_competition_name
 from ui.display import render_note_card, render_page_banner, render_section_heading
+from ui.exports import render_csv_download
 from ui.styles import inject_dashboard_styles
 
 st.set_page_config(page_title="LIVE LEAGUES - Football Data Platform", layout="wide")
@@ -354,6 +355,23 @@ def _prepare_league_table(df: pd.DataFrame) -> pd.DataFrame:
     return table
 
 
+def _focus_scope_table(table: pd.DataFrame, focus_mode: str) -> pd.DataFrame:
+    if table.empty:
+        return table
+    if focus_mode == "Complet":
+        return table
+    if focus_mode == "Course au titre":
+        scoped = table[table["position"].astype(int) <= 4].copy()
+        return scoped if not scoped.empty else table
+    if focus_mode == "Europe":
+        scoped = table[table["zone"].astype(str).isin(["UCL", "UEL", "UECL"])].copy()
+        return scoped if not scoped.empty else table
+    if focus_mode == "Relegation":
+        scoped = table[table["zone"].astype(str).isin(["DANGER", "RELEGATION"])].copy()
+        return scoped if not scoped.empty else table
+    return table
+
+
 def _crest_html(team_name: str, crest_url: str | None) -> str:
     if crest_url:
         return f'<img class="fdp-team-crest" src="{html.escape(str(crest_url))}" alt="{html.escape(team_name)} crest" />'
@@ -505,11 +523,19 @@ def main() -> None:
             "La page est prete pour plusieurs championnats des que le pipeline les charge."
         )
 
+    focus_mode = st.radio(
+        "Mode de lecture",
+        ["Complet", "Course au titre", "Europe", "Relegation"],
+        horizontal=True,
+        key="live_leagues_focus_mode",
+    )
+
     league_names = list(league_tables.keys())
     tabs = st.tabs(league_names)
     for tab, competition_name in zip(tabs, league_names):
         with tab:
             table = _prepare_league_table(league_tables[competition_name])
+            table = _focus_scope_table(table, focus_mode=focus_mode)
             season = table.iloc[0]["season"]
             matchday = table.iloc[0]["matchday"]
             recent_form = get_live_league_form(int(table.iloc[0]["competition_id"]), int(season))
@@ -518,6 +544,28 @@ def main() -> None:
             top[0].metric("Competition", competition_name)
             top[1].metric("Season", str(season))
             top[2].metric("Matchday", "-" if matchday is None else int(matchday))
+            export_table = table.rename(
+                columns={
+                    "position": "Pos",
+                    "team_name": "Team",
+                    "points": "Pts",
+                    "played_games": "MJ",
+                    "won": "W",
+                    "draw": "D",
+                    "lost": "L",
+                    "goals_for": "GF",
+                    "goals_against": "GA",
+                    "goal_difference": "GD",
+                    "zone": "Zone",
+                }
+            )[["Pos", "Team", "Pts", "MJ", "W", "D", "L", "GF", "GA", "GD", "Zone"]].copy()
+            export_table["Zone"] = export_table["Zone"].astype(str).replace("nan", "")
+            render_csv_download(
+                df=export_table,
+                label=f"Export {competition_name} (CSV)",
+                filename=f"live_league_{competition_name.lower().replace(' ', '_')}.csv",
+                key=f"live_league_export_{competition_name}",
+            )
             _render_zone_legend()
             _render_rule_note(competition_name)
             _render_standings_table(table, recent_form)
@@ -525,3 +573,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

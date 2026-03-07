@@ -51,6 +51,15 @@ services:
       INCREMENTAL: ${INCREMENTAL:-false}
       INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-14}
       DQ_FRESHNESS_DAYS: ${DQ_FRESHNESS_DAYS:-7}
+      ALERTS_ENABLED: ${ALERTS_ENABLED:-false}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER:-}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD:-}
+      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM:-}
+      ALERT_SMTP_TO: ${ALERT_SMTP_TO:-}
+      ALERT_SMTP_STARTTLS: ${ALERT_SMTP_STARTTLS:-true}
       SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
       SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
       STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
@@ -60,6 +69,60 @@ services:
     networks:
       - internal
     restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - db_writer_password
+
+  pipeline_scheduler:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - while true; do python -m src.run_pipeline; sleep ${PIPELINE_INTERVAL_SECONDS:-1800}; done
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-football_dw}
+      DB_USER: ${DB_WRITER_USER:-pipeline_rw}
+      DB_PASSWORD_FILE: /run/secrets/db_writer_password
+      DATABASE_URL: ${DATABASE_URL:-}
+      FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
+      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-}
+      FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
+      FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON:-}
+      FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION:-PD}
+      COMPETITION_CODE: ${COMPETITION_CODE:-PD}
+      FOOTBALL_DATA_TEAM_NAME: ${FOOTBALL_DATA_TEAM_NAME:-Real Madrid CF}
+      DATA_MODE: ${DATA_MODE:-api}
+      PIPELINE_MODE: ${PIPELINE_MODE:-api}
+      LIVE_COMPETITION_CODES: ${LIVE_COMPETITION_CODES:-PD,PL,SA,BL1,FL1,CL,EL,UCL}
+      INCREMENTAL: ${INCREMENTAL:-false}
+      INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-14}
+      DQ_FRESHNESS_DAYS: ${DQ_FRESHNESS_DAYS:-7}
+      ALERTS_ENABLED: ${ALERTS_ENABLED:-false}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER:-}
+      ALERT_SMTP_PASSWORD: ${ALERT_SMTP_PASSWORD:-}
+      ALERT_SMTP_FROM: ${ALERT_SMTP_FROM:-}
+      ALERT_SMTP_TO: ${ALERT_SMTP_TO:-}
+      ALERT_SMTP_STARTTLS: ${ALERT_SMTP_STARTTLS:-true}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
+      STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
+      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
+      FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
+      FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES:-600}
+    networks:
+      - internal
+    restart: always
     cap_drop:
       - ALL
     security_opt:
@@ -99,6 +162,8 @@ services:
       STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
       STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
       FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
+      DASHBOARD_ADMIN_USERNAME: ${DASHBOARD_ADMIN_USERNAME:-admin}
+      DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:-admin123!}
     networks:
       - internal
     restart: always

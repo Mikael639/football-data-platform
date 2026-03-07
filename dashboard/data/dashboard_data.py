@@ -1325,7 +1325,22 @@ def get_current_standings(
     JOIN dim_team t ON t.team_id = s.team_id
     ORDER BY s.position NULLS LAST, t.team_name
     """
-    return _read_sql(query, {"competition_id": competition_id, "season_start": season_start})
+    df = _read_sql(query, {"competition_id": competition_id, "season_start": season_start})
+    if df.empty:
+        return df
+
+    matchday = pd.to_numeric(df.get("matchday"), errors="coerce")
+    played_games = pd.to_numeric(df.get("played_games"), errors="coerce")
+    if matchday.notna().any() and played_games.notna().any():
+        latest_matchday = int(matchday.max())
+        min_played = int(played_games.min())
+        max_played = int(played_games.max())
+        # Guardrail: discard corrupted snapshots where clubs have wildly different game counts.
+        if latest_matchday >= 10 and (max_played - min_played) > 2:
+            return df.head(0)
+        if max_played > latest_matchday + 1:
+            return df.head(0)
+    return df
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
@@ -1505,6 +1520,61 @@ def get_players(
     ORDER BY t.team_name, p.full_name
     """
     return _read_sql(query, params)
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_player_impact_stats(
+    team_id: int | None = None,
+    competition_id: int | None = None,
+    season: str | None = None,
+) -> pd.DataFrame:
+    params: dict[str, Any] = {
+        "competition_id": competition_id,
+        "season": season,
+    }
+    team_clause = ""
+    if team_id is not None:
+        team_ids = get_team_alias_ids(team_id, competition_id, season)
+        in_clause = _build_sql_in_clause(team_ids, "impact_team_id", params)
+        team_clause = f" AND p.team_id IN ({in_clause})"
+
+    season_clause = "AND (:season IS NULL OR m.season = :season)" if fact_match_has_season_column() else ""
+    query = f"""
+    SELECT
+      p.player_id,
+      p.full_name,
+      p.position,
+      p.nationality,
+      p.team_id,
+      t.team_name,
+      COUNT(DISTINCT s.match_id) AS matches_played,
+      SUM(COALESCE(s.minutes, 0)) AS minutes,
+      SUM(COALESCE(s.goals, 0)) AS goals,
+      SUM(COALESCE(s.assists, 0)) AS assists,
+      SUM(COALESCE(s.shots, 0)) AS shots
+    FROM fact_player_match_stats s
+    JOIN fact_match m ON m.match_id = s.match_id
+    JOIN dim_player p ON p.player_id = s.player_id
+    LEFT JOIN dim_team t ON t.team_id = p.team_id
+    WHERE (:competition_id IS NULL OR m.competition_id = :competition_id)
+      {season_clause}
+      {team_clause}
+    GROUP BY p.player_id, p.full_name, p.position, p.nationality, p.team_id, t.team_name
+    ORDER BY minutes DESC, goals DESC, assists DESC, p.full_name
+    """
+    df = _read_sql(query, params)
+    if df.empty:
+        return df
+
+    numeric_cols = ["matches_played", "minutes", "goals", "assists", "shots"]
+    for column in numeric_cols:
+        df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0)
+    df["goal_contrib"] = df["goals"] + df["assists"]
+    df["goal_contrib_p90"] = df.apply(
+        lambda row: (float(row["goal_contrib"]) * 90.0 / float(row["minutes"])) if float(row["minutes"]) > 0 else 0.0,
+        axis=1,
+    )
+    return df
 
 
 @st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
@@ -1730,3 +1800,179 @@ def get_dq_checks(run_id: str | None = None, limit: int = 200) -> pd.DataFrame:
     if not df.empty and "run_id" in df.columns:
         df["run_id"] = df["run_id"].astype(str)
     return df
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_latest_quality_score() -> dict[str, Any]:
+    runs = get_pipeline_runs(limit=1)
+    if runs.empty:
+        return {"score": None, "grade": "N/A", "run_id": None, "fail_count": 0, "warn_count": 0}
+    run_id = str(runs.iloc[0]["run_id"])
+    checks = get_dq_checks(run_id=run_id, limit=500)
+    if checks.empty:
+        return {"score": 100, "grade": "A", "run_id": run_id, "fail_count": 0, "warn_count": 0}
+
+    fail_count = int((checks["status"].astype(str) == "FAIL").sum())
+    warn_count = int((checks["status"].astype(str) == "WARN").sum())
+    score = max(0, 100 - (35 * fail_count) - (10 * warn_count))
+    grade = "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D"
+    return {
+        "score": int(score),
+        "grade": grade,
+        "run_id": run_id,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_season_history(competition_id: int | None = 2014) -> pd.DataFrame:
+    query = """
+    WITH latest_matchday AS (
+      SELECT competition_id, season, MAX(matchday) AS matchday
+      FROM fact_standings_snapshot
+      WHERE (:competition_id IS NULL OR competition_id = :competition_id)
+      GROUP BY competition_id, season
+    )
+    SELECT
+      s.competition_id,
+      s.season,
+      s.matchday,
+      s.team_id,
+      t.team_name,
+      s.position,
+      s.points,
+      s.played_games,
+      s.won,
+      s.draw,
+      s.lost,
+      s.goals_for,
+      s.goals_against,
+      s.goal_difference
+    FROM fact_standings_snapshot s
+    JOIN latest_matchday lm
+      ON lm.competition_id = s.competition_id
+     AND lm.season = s.season
+     AND ((lm.matchday IS NULL AND s.matchday IS NULL) OR lm.matchday = s.matchday)
+    JOIN dim_team t ON t.team_id = s.team_id
+    WHERE (:competition_id IS NULL OR s.competition_id = :competition_id)
+    ORDER BY s.season DESC, s.position ASC, t.team_name
+    """
+    return _read_sql(query, {"competition_id": competition_id})
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_season_champions(competition_id: int | None = 2014) -> pd.DataFrame:
+    history = get_season_history(competition_id=competition_id)
+    if history.empty:
+        return history
+    champions = history[history["position"] == 1].copy()
+    champions["season_label"] = champions["season"].astype(int).map(lambda start: f"{start}-{start + 1}")
+    return champions[["season", "season_label", "team_name", "points", "played_games"]].sort_values(
+        "season", ascending=False
+    ).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, ttl=DEFAULT_CACHE_TTL)
+def get_team_xg_proxy(
+    competition_id: int | None = None,
+    season: str | None = None,
+    team_id: int | None = None,
+    limit: int = 12,
+) -> pd.DataFrame:
+    if team_id is None:
+        return pd.DataFrame()
+    team_ids = get_team_alias_ids(team_id, competition_id, season)
+    params: dict[str, Any] = {"competition_id": competition_id, "season": season}
+    in_clause = _build_sql_in_clause(team_ids, "xg_team_id", params)
+
+    query = f"""
+    WITH shots_by_team AS (
+      SELECT
+        s.match_id,
+        p.team_id,
+        SUM(COALESCE(s.shots, 0)) AS shots
+      FROM fact_player_match_stats s
+      JOIN dim_player p ON p.player_id = s.player_id
+      GROUP BY s.match_id, p.team_id
+    ),
+    scoped_matches AS (
+      SELECT
+        m.match_id,
+        COALESCE((m.kickoff_utc AT TIME ZONE 'UTC')::date, m.date_id) AS match_date,
+        m.kickoff_utc,
+        m.home_team_id,
+        m.away_team_id,
+        m.home_score,
+        m.away_score
+      FROM fact_match m
+      WHERE (:competition_id IS NULL OR m.competition_id = :competition_id)
+        AND (:season IS NULL OR m.season = :season)
+        AND m.status = 'FINISHED'
+        AND m.home_score IS NOT NULL
+        AND m.away_score IS NOT NULL
+        AND (m.home_team_id IN ({in_clause}) OR m.away_team_id IN ({in_clause}))
+    )
+    SELECT
+      sm.match_id,
+      sm.match_date,
+      sm.kickoff_utc,
+      sm.home_team_id,
+      sm.away_team_id,
+      sm.home_score,
+      sm.away_score,
+      COALESCE(hs.shots, 0) AS home_shots,
+      COALESCE(aws.shots, 0) AS away_shots,
+      ht.team_name AS home_team_name,
+      at.team_name AS away_team_name
+    FROM scoped_matches sm
+    LEFT JOIN shots_by_team hs ON hs.match_id = sm.match_id AND hs.team_id = sm.home_team_id
+    LEFT JOIN shots_by_team aws ON aws.match_id = sm.match_id AND aws.team_id = sm.away_team_id
+    JOIN dim_team ht ON ht.team_id = sm.home_team_id
+    JOIN dim_team at ON at.team_id = sm.away_team_id
+    ORDER BY sm.match_date DESC, sm.match_id DESC
+    """
+    raw = _read_sql(query, params)
+    if raw.empty:
+        return raw
+
+    team_id_set = {int(value) for value in team_ids}
+    rows: list[dict[str, Any]] = []
+    for _, row in raw.iterrows():
+        home_id = int(row["home_team_id"])
+        away_id = int(row["away_team_id"])
+        is_home = home_id in team_id_set
+        if not is_home and away_id not in team_id_set:
+            continue
+
+        goals_for = int(row["home_score"]) if is_home else int(row["away_score"])
+        goals_against = int(row["away_score"]) if is_home else int(row["home_score"])
+        shots_for = float(row["home_shots"]) if is_home else float(row["away_shots"])
+        shots_against = float(row["away_shots"]) if is_home else float(row["home_shots"])
+        opponent = str(row["away_team_name"]) if is_home else str(row["home_team_name"])
+
+        rows.append(
+            {
+                "match_id": int(row["match_id"]),
+                "match_date": pd.to_datetime(row["match_date"], errors="coerce"),
+                "opponent": opponent,
+                "goals_for": goals_for,
+                "goals_against": goals_against,
+                "shots_for": shots_for,
+                "shots_against": shots_against,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame()
+
+    output = pd.DataFrame(rows).sort_values(["match_date", "match_id"]).reset_index(drop=True)
+    output["xg_for"] = output["shots_for"] * 0.11
+    output["xga"] = output["shots_against"] * 0.11
+
+    if float(output["xg_for"].sum() + output["xga"].sum()) == 0.0:
+        output["xg_for"] = output["goals_for"].astype(float)
+        output["xga"] = output["goals_against"].astype(float)
+
+    output["match_label"] = output["match_date"].dt.strftime("%m-%d")
+    return output.tail(max(int(limit), 1)).reset_index(drop=True)

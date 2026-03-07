@@ -109,6 +109,11 @@ class Settings:
     supabase_db_url: str | None = None
     study_supabase_db_url: str | None = None
     fbref_study_backend: str = "local"
+    enrich_player_stats: bool = False
+    player_stats_provider: str = "fbref"
+    player_stats_token: str | None = None
+    player_stats_base_url: str | None = None
+    player_stats_timeout_sec: int = 30
 
     def __post_init__(self) -> None:
         if self.data_mode not in {"mock", "api", "csv", "hybrid"}:
@@ -140,6 +145,10 @@ class Settings:
                 "FOOTBALL_DATA_TOKEN is required when DATA_MODE is 'api' or 'hybrid'. "
                 "Set DATA_MODE=mock or DATA_MODE=csv to use local datasets only."
             )
+        if self.enrich_player_stats and self.player_stats_provider == "custom_http" and not self.player_stats_base_url:
+            raise SettingsError(
+                "PLAYER_STATS_BASE_URL is required when ENRICH_PLAYER_STATS=true and PLAYER_STATS_PROVIDER=custom_http."
+            )
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -152,6 +161,11 @@ class Settings:
             source,
             key="STUDY_SUPABASE_DB_URL",
             file_key="STUDY_SUPABASE_DB_URL_FILE",
+        )
+        player_stats_token = _secret_from_env(
+            source,
+            key="PLAYER_STATS_TOKEN",
+            file_key="PLAYER_STATS_TOKEN_FILE",
         )
         return cls(
             db_host=_first_value(source, ("DB_HOST",), "localhost", allow_blank=True) or "",
@@ -185,6 +199,17 @@ class Settings:
             supabase_db_url=supabase_db_url,
             study_supabase_db_url=study_supabase_db_url,
             fbref_study_backend=_first_value(source, ("FBREF_STUDY_BACKEND",), "local") or "local",
+            enrich_player_stats=_parse_bool(_first_value(source, ("ENRICH_PLAYER_STATS",), "false"), default=False),
+            player_stats_provider=(
+                _first_value(source, ("PLAYER_STATS_PROVIDER",), "fbref") or "fbref"
+            ).strip().lower(),
+            player_stats_token=player_stats_token,
+            player_stats_base_url=_first_value(source, ("PLAYER_STATS_BASE_URL",), None),
+            player_stats_timeout_sec=_parse_int(
+                _first_value(source, ("PLAYER_STATS_TIMEOUT_SEC",), "30"),
+                field_name="PLAYER_STATS_TIMEOUT_SEC",
+                default=30,
+            ),
         )
 
 
