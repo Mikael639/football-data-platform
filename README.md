@@ -139,12 +139,6 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres da
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d pipeline_scheduler
 ```
 
-6. Optionnel: lancer une pipeline one-shot:
-
-```powershell
-docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm pipeline
-```
-
 ### Workflow automatise (recommande)
 
 ```powershell
