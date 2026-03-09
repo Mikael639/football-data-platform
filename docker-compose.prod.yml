@@ -8,6 +8,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-football_dw}
       DB_WRITER_USER: ${DB_WRITER_USER:-pipeline_rw}
       DB_READER_USER: ${DB_READER_USER:-dashboard_ro}
+      DB_WRITER_PASSWORD: ${DB_WRITER_PASSWORD:-}
+      DB_READER_PASSWORD: ${DB_READER_PASSWORD:-}
       DB_WRITER_PASSWORD_FILE: /run/secrets/db_writer_password
       DB_READER_PASSWORD_FILE: /run/secrets/db_reader_password
     volumes:
@@ -36,6 +38,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-football_dw}
       DB_USER: ${DB_WRITER_USER:-pipeline_rw}
+      DB_PASSWORD: ${DB_WRITER_PASSWORD:-}
       DB_PASSWORD_FILE: /run/secrets/db_writer_password
       DATABASE_URL: ${DATABASE_URL:-}
       FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
@@ -90,6 +93,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-football_dw}
       DB_USER: ${DB_WRITER_USER:-pipeline_rw}
+      DB_PASSWORD: ${DB_WRITER_PASSWORD:-}
       DB_PASSWORD_FILE: /run/secrets/db_writer_password
       DATABASE_URL: ${DATABASE_URL:-}
       FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
@@ -142,6 +146,7 @@ services:
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-football_dw}
       DB_USER: ${DB_READER_USER:-dashboard_ro}
+      DB_PASSWORD: ${DB_READER_PASSWORD:-}
       DB_PASSWORD_FILE: /run/secrets/db_reader_password
       DATABASE_URL: ${DATABASE_URL:-}
       FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
