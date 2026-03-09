@@ -42,7 +42,7 @@ services:
       DB_PASSWORD_FILE: /run/secrets/db_writer_password
       DATABASE_URL: ${DATABASE_URL:-}
       FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
-      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-}
+      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-/run/secrets/football_data_token}
       FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
       FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON:-}
       FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION:-PD}
@@ -64,9 +64,9 @@ services:
       ALERT_SMTP_TO: ${ALERT_SMTP_TO:-}
       ALERT_SMTP_STARTTLS: ${ALERT_SMTP_STARTTLS:-true}
       SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
-      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
+      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-/run/secrets/supabase_db_url}
       STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
-      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
+      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-/run/secrets/study_supabase_db_url}
       FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
       FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES:-600}
     networks:
@@ -79,6 +79,9 @@ services:
       - no-new-privileges:true
     secrets:
       - db_writer_password
+      - football_data_token
+      - supabase_db_url
+      - study_supabase_db_url
 
   pipeline_scheduler:
     build: .
@@ -98,7 +101,7 @@ services:
       DB_PASSWORD_FILE: /run/secrets/db_writer_password
       DATABASE_URL: ${DATABASE_URL:-}
       FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
-      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-}
+      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-/run/secrets/football_data_token}
       FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
       FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON:-}
       FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION:-PD}
@@ -120,9 +123,9 @@ services:
       ALERT_SMTP_TO: ${ALERT_SMTP_TO:-}
       ALERT_SMTP_STARTTLS: ${ALERT_SMTP_STARTTLS:-true}
       SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
-      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
+      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-/run/secrets/supabase_db_url}
       STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
-      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
+      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-/run/secrets/study_supabase_db_url}
       FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
       FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES:-600}
     networks:
@@ -135,6 +138,9 @@ services:
       - no-new-privileges:true
     secrets:
       - db_writer_password
+      - football_data_token
+      - supabase_db_url
+      - study_supabase_db_url
 
   dashboard:
     build:
@@ -152,7 +158,7 @@ services:
       DB_PASSWORD_FILE: /run/secrets/db_reader_password
       DATABASE_URL: ${DATABASE_URL:-}
       FOOTBALL_DATA_TOKEN: ${FOOTBALL_DATA_TOKEN:-}
-      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-}
+      FOOTBALL_DATA_TOKEN_FILE: ${FOOTBALL_DATA_TOKEN_FILE:-/run/secrets/football_data_token}
       FOOTBALL_DATA_BASE_URL: ${FOOTBALL_DATA_BASE_URL:-https://api.football-data.org/v4}
       FOOTBALL_DATA_SEASON: ${FOOTBALL_DATA_SEASON:-}
       FOOTBALL_DATA_COMPETITION: ${FOOTBALL_DATA_COMPETITION:-PD}
@@ -165,9 +171,9 @@ services:
       INCREMENTAL_DAYS: ${INCREMENTAL_DAYS:-14}
       DQ_FRESHNESS_DAYS: ${DQ_FRESHNESS_DAYS:-7}
       SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
-      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-}
+      SUPABASE_DB_URL_FILE: ${SUPABASE_DB_URL_FILE:-/run/secrets/supabase_db_url}
       STUDY_SUPABASE_DB_URL: ${STUDY_SUPABASE_DB_URL:-}
-      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-}
+      STUDY_SUPABASE_DB_URL_FILE: ${STUDY_SUPABASE_DB_URL_FILE:-/run/secrets/study_supabase_db_url}
       FBREF_STUDY_BACKEND: ${FBREF_STUDY_BACKEND:-local}
       DASHBOARD_ADMIN_USERNAME: ${DASHBOARD_ADMIN_USERNAME:-admin}
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:-admin123!}
@@ -181,6 +187,9 @@ services:
       - no-new-privileges:true
     secrets:
       - db_reader_password
+      - football_data_token
+      - supabase_db_url
+      - study_supabase_db_url
 
   proxy:
     image: caddy:2.8-alpine
@@ -226,3 +235,9 @@ secrets:
     file: ./secrets/db_writer_password.txt
   db_reader_password:
     file: ./secrets/db_reader_password.txt
+  football_data_token:
+    file: ./secrets/football_data_token.txt
+  supabase_db_url:
+    file: ./secrets/supabase_db_url.txt
+  study_supabase_db_url:
+    file: ./secrets/study_supabase_db_url.txt

@@ -19,6 +19,20 @@
   - `SUPABASE_DB_URL_FILE`
   - `STUDY_SUPABASE_DB_URL_FILE`
 
+OCI Vault workflow:
+
+1. Create three secrets in OCI Vault:
+   - `football-data-token`
+   - `supabase-db-url`
+   - `study-supabase-db-url` (optional)
+2. Create a Dynamic Group for the production instance.
+3. Add a policy that allows this Dynamic Group to `read secret-family` in the compartment that contains the secrets.
+4. Install OCI CLI on the VM.
+5. Export the secret OCIDs on the VM and run `scripts/oci_vault_sync.sh`.
+6. Restart the stack with `docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build`.
+
+After sync, `.env.prod` is rewritten to blank direct values and prefer `/run/secrets/...` paths.
+
 ## 2) Network model
 
 - Use `docker-compose.prod.yml`.

@@ -43,8 +43,42 @@ Renseignez ensuite la valeur dans `BASIC_AUTH_HASH` dans `.env.prod`.
 - `secrets/postgres_superuser_password.txt`
 - `secrets/db_writer_password.txt`
 - `secrets/db_reader_password.txt`
+- `secrets/football_data_token.txt`
+- `secrets/supabase_db_url.txt`
+- `secrets/study_supabase_db_url.txt`
 
-## 4) Demarrez la stack production
+Les trois fichiers base de donnees sont obligatoires.
+Les fichiers `football_data_token.txt` et `supabase_db_url.txt` doivent exister si vous utilisez `docker-compose.prod.yml`.
+Vous pouvez laisser `study_supabase_db_url.txt` vide si vous reutilisez la meme URL Supabase.
+
+## 4) Utilisez OCI Vault pour les secrets applicatifs
+
+Sur Oracle Cloud Infrastructure :
+
+1. Creez un Vault puis des secrets pour :
+   - `football-data-token`
+   - `supabase-db-url`
+   - `study-supabase-db-url` (optionnel)
+2. Creez un Dynamic Group qui cible votre instance de production.
+3. Ajoutez une policy autorisant ce Dynamic Group a lire `secret-family` dans le compartment des secrets.
+4. Installez OCI CLI sur la VM.
+5. Sur la VM, exportez les OCID des secrets puis lancez :
+
+```bash
+export FOOTBALL_DATA_TOKEN_SECRET_OCID="ocid1.vaultsecret.oc1..."
+export SUPABASE_DB_URL_SECRET_OCID="ocid1.vaultsecret.oc1..."
+export STUDY_SUPABASE_DB_URL_SECRET_OCID="ocid1.vaultsecret.oc1..."
+bash scripts/oci_vault_sync.sh
+```
+
+Le script :
+
+- telecharge les secrets depuis OCI Vault avec `OCI_CLI_AUTH=instance_principal`
+- ecrit les valeurs dans `secrets/*.txt`
+- vide les valeurs directes dans `.env.prod`
+- force l usage de `/run/secrets/...` dans les conteneurs
+
+## 5) Demarrez la stack production
 
 Linux/macOS (bash/zsh) :
 
@@ -58,7 +92,7 @@ Windows PowerShell :
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres dashboard proxy
 ```
 
-## 5) Demarrez le scheduler pipeline
+## 6) Demarrez le scheduler pipeline
 
 Linux/macOS (bash/zsh) :
 
