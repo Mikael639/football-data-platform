@@ -71,6 +71,7 @@ services:
       FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES:-600}
     networks:
       - internal
+      - edge
     restart: "no"
     cap_drop:
       - ALL
@@ -126,6 +127,7 @@ services:
       FBREF_STUDY_MIN_MINUTES: ${FBREF_STUDY_MIN_MINUTES:-600}
     networks:
       - internal
+      - edge
     restart: always
     cap_drop:
       - ALL
@@ -171,6 +173,7 @@ services:
       DASHBOARD_ADMIN_PASSWORD: ${DASHBOARD_ADMIN_PASSWORD:-admin123!}
     networks:
       - internal
+      - edge
     restart: always
     cap_drop:
       - ALL
