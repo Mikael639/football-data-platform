@@ -92,7 +92,38 @@ Windows PowerShell :
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d postgres dashboard proxy
 ```
 
-## 6) Demarrez le scheduler pipeline
+## 6) Mode OCI Always Free (E2.1.Micro)
+
+Si vous etes limites a `VM.Standard.E2.1.Micro`, utilisez l override :
+
+- `docker-compose.prod.free.yml`
+
+Objectif :
+
+- garder `postgres + dashboard + proxy`
+- desactiver le scheduler par defaut
+- lancer le pipeline uniquement a la demande
+- reduire la pression memoire sur PostgreSQL et Streamlit
+
+Demarrage minimal :
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.prod.free.yml up -d postgres dashboard proxy
+```
+
+Pipeline manuel :
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.prod.free.yml run --rm pipeline
+```
+
+Scheduler uniquement si vous acceptez le risque de saturation :
+
+```bash
+docker compose --profile scheduler --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.prod.free.yml up -d pipeline_scheduler
+```
+
+## 7) Demarrez le scheduler pipeline
 
 Linux/macOS (bash/zsh) :
 
