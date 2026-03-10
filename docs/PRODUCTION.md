@@ -146,6 +146,14 @@ Routine hebdomadaire recommandee sur `E2.1.Micro` :
 3. Ne lancez pas `pipeline_scheduler` en continu sur cette shape
 4. N utilisez le scheduler que ponctuellement, ou pas du tout
 
+Mini checklist hebdo :
+
+1. Connectez-vous a la VM
+2. Lancez `update-football`
+3. Ouvrez `https://votre-domaine` et connectez-vous
+4. Verifiez rapidement la page `Monitoring`
+5. Si tout est stable, ne touchez a rien d autre sur cette VM
+
 ## 7) Demarrez le scheduler pipeline
 
 Linux/macOS (bash/zsh) :
