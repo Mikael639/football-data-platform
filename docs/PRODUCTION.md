@@ -123,6 +123,29 @@ Scheduler uniquement si vous acceptez le risque de saturation :
 docker compose --profile scheduler --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.prod.free.yml up -d pipeline_scheduler
 ```
 
+Commande unique sur la VM :
+
+1. Creez une fois `secrets/oci_vault_ids.env` a partir de `scripts/oci_vault_ids.env.example`
+2. Renseignez les `OCID` OCI Vault
+3. Lancez :
+
+```bash
+bash scripts/prod_update_free.sh
+```
+
+Options :
+
+```bash
+bash scripts/prod_update_free.sh --skip-pipeline
+```
+
+Routine hebdomadaire recommandee sur `E2.1.Micro` :
+
+1. `bash scripts/prod_update_free.sh`
+2. Verifiez le dashboard sur `https://votre-domaine`
+3. Ne lancez pas `pipeline_scheduler` en continu sur cette shape
+4. N utilisez le scheduler que ponctuellement, ou pas du tout
+
 ## 7) Demarrez le scheduler pipeline
 
 Linux/macOS (bash/zsh) :

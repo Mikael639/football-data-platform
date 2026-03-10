@@ -142,6 +142,7 @@ Scans CI :
 Le projet est adapte a un usage local/dev. Pour un deploiement public, utilisez la stack de production dediee.
 
 - Si vous etes bloques sur `OCI VM.Standard.E2.1.Micro`, utilisez le mode leger documente dans `docs/PRODUCTION.md` avec `docker-compose.prod.free.yml`.
+- Sur cette shape, la commande recommandee sur la VM est `bash scripts/prod_update_free.sh`.
 - Guide production : [docs/PRODUCTION.md](docs/PRODUCTION.md)
 - Guide backup chiffre : [docs/BACKUP.md](docs/BACKUP.md)
 - Runbook detaille : [infra/PROD_RUNBOOK.md](infra/PROD_RUNBOOK.md)
