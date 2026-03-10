@@ -5,7 +5,7 @@ ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 RUN pip install --no-cache-dir --upgrade pip
-RUN useradd --create-home --uid 10001 appuser
+RUN useradd --create-home --uid 1001 appuser
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt

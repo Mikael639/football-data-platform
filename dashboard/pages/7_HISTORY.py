@@ -37,7 +37,7 @@ def _competition_selector() -> int | None:
             default_index = idx
             break
 
-    selected_label = st.selectbox("Competition", labels, index=default_index, key="history_competition")
+    selected_label = st.selectbox("Championnat", labels, index=default_index, key="history_competition")
     return int(id_by_label[selected_label])
 
 

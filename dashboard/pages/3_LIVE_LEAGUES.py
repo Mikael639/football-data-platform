@@ -539,15 +539,15 @@ def main() -> None:
             season = table.iloc[0]["season"]
             matchday = table.iloc[0]["matchday"]
             recent_form = get_live_league_form(int(table.iloc[0]["competition_id"]), int(season))
-            render_section_heading("League Snapshot")
+            render_section_heading("Instantane du championnat")
             top = st.columns(3)
-            top[0].metric("Competition", competition_name)
-            top[1].metric("Season", str(season))
-            top[2].metric("Matchday", "-" if matchday is None else int(matchday))
+            top[0].metric("Championnat", competition_name)
+            top[1].metric("Saison", str(season))
+            top[2].metric("Journee", "-" if matchday is None else int(matchday))
             export_table = table.rename(
                 columns={
                     "position": "Pos",
-                    "team_name": "Team",
+                    "team_name": "Equipe",
                     "points": "Pts",
                     "played_games": "MJ",
                     "won": "W",
@@ -558,7 +558,7 @@ def main() -> None:
                     "goal_difference": "GD",
                     "zone": "Zone",
                 }
-            )[["Pos", "Team", "Pts", "MJ", "W", "D", "L", "GF", "GA", "GD", "Zone"]].copy()
+            )[["Pos", "Equipe", "Pts", "MJ", "W", "D", "L", "GF", "GA", "GD", "Zone"]].copy()
             export_table["Zone"] = export_table["Zone"].astype(str).replace("nan", "")
             render_csv_download(
                 df=export_table,
