@@ -53,7 +53,7 @@ write_secret_file "${SUPABASE_DB_URL_SECRET_OCID}" "${SECRETS_DIR}/supabase_db_u
 if [[ -n "${STUDY_SUPABASE_DB_URL_SECRET_OCID}" ]]; then
     write_secret_file "${STUDY_SUPABASE_DB_URL_SECRET_OCID}" "${SECRETS_DIR}/study_supabase_db_url.txt"
 else
-    : > "${SECRETS_DIR}/study_supabase_db_url.txt"
+    cp "${SECRETS_DIR}/supabase_db_url.txt" "${SECRETS_DIR}/study_supabase_db_url.txt"
     chmod 600 "${SECRETS_DIR}/study_supabase_db_url.txt"
 fi
 
