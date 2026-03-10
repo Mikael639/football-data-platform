@@ -24,7 +24,7 @@ def _safe_run_value(runs: pd.DataFrame, column: str, fallback: str) -> str:
 
 
 def _render_hero(competitions: pd.DataFrame) -> None:
-    competition_names = ", ".join(competitions["competition_name"].dropna().astype(str).tolist()[:5]) or "Leagues"
+    competition_names = ", ".join(competitions["competition_name"].dropna().astype(str).tolist()[:5]) or "Ligues"
     left, right = st.columns([6, 1.25], vertical_alignment="center")
     with left:
         st.markdown(
@@ -36,9 +36,9 @@ def _render_hero(competitions: pd.DataFrame) -> None:
                 Hub analytique pour suivre les ligues, les clubs et la sante de la plateforme depuis une seule interface.
               </div>
               <div class="fdp-chip-row">
-                <span class="fdp-chip">Competitions: {competition_names}</span>
-                <span class="fdp-chip">UI first</span>
-                <span class="fdp-chip">Analytics + Live</span>
+                <span class="fdp-chip">Competitions : {competition_names}</span>
+                <span class="fdp-chip">Interface unifiee</span>
+                <span class="fdp-chip">Analytique + Live</span>
               </div>
             </div>
             """,
@@ -49,14 +49,14 @@ def _render_hero(competitions: pd.DataFrame) -> None:
 
 
 def _render_summary_cards(competitions: pd.DataFrame, runs: pd.DataFrame, *, is_admin: bool) -> None:
-    latest_status = _safe_run_value(runs, "status", "No run")
+    latest_status = _safe_run_value(runs, "status", "Aucun run")
     latest_started = _safe_run_value(runs, "started_at", "N/A")
     latest_duration = _safe_run_value(runs, "duration_ms", "N/A")
     pages_count = 8 if is_admin else 7
     pages_label = (
-        "Overview, Team, Players, Live, Europe, Monitoring, History et Prediction."
+        "Vue d ensemble, Equipe, Joueurs, Ligues live, Europe, Monitoring, Historique et Prediction."
         if is_admin
-        else "Overview, Team, Players, Live, Europe, History et Prediction."
+        else "Vue d ensemble, Equipe, Joueurs, Ligues live, Europe, Historique et Prediction."
     )
     st.markdown(
         f"""
@@ -72,9 +72,9 @@ def _render_summary_cards(competitions: pd.DataFrame, runs: pd.DataFrame, *, is_
             <div class="fdp-signal-sub">{pages_label}</div>
           </div>
           <div class="fdp-home-summary-card">
-            <div class="fdp-home-summary-kicker">Latest Status</div>
+            <div class="fdp-home-summary-kicker">Dernier statut</div>
             <div class="fdp-signal-value">{latest_status}</div>
-            <div class="fdp-signal-sub">Dernier run: {latest_started} | Duration: {latest_duration}</div>
+            <div class="fdp-signal-sub">Dernier run: {latest_started} | Duree: {latest_duration}</div>
           </div>
         </div>
         """,
@@ -106,38 +106,38 @@ def _render_page_tile(
             """,
             unsafe_allow_html=True,
         )
-        st.page_link(target, label=f"Open {title}")
+        st.page_link(target, label=f"Ouvrir {title}")
         st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _render_page_cards(*, is_admin: bool) -> None:
     top = st.columns(3)
-    _render_page_tile(top[0], "OVERVIEW", "Vue analytique globale pour lire les KPIs, le calendrier et le dernier classement disponible.", ["KPIs", "Calendrier", "Classement"], "pages/0_Overview.py", "Overview.png")
-    _render_page_tile(top[1], "TEAM", "Lecture club par club avec forme recente, splits domicile/exterieur et trajectoire au classement.", ["Forme", "Equipe", "Focus club"], "pages/1_Team.py", "Team.png")
-    _render_page_tile(top[2], "LIVE LEAGUES", "Comparateur multi-ligues pour lire la table courante de chaque championnat disponible en base.", ["Multi-leagues", "Zones UEFA", "Live snapshot"], "pages/3_LIVE_LEAGUES.py", "Live Leagues.png")
+    _render_page_tile(top[0], "VUE D ENSEMBLE", "Vue analytique globale pour lire les KPIs, le calendrier et le dernier classement disponible.", ["KPIs", "Calendrier", "Classement"], "pages/0_Overview.py", "Overview.png")
+    _render_page_tile(top[1], "EQUIPE", "Lecture club par club avec forme recente, splits domicile/exterieur et trajectoire au classement.", ["Forme", "Equipe", "Focus club"], "pages/1_Team.py", "Team.png")
+    _render_page_tile(top[2], "LIGUES LIVE", "Comparateur multi-ligues pour lire la table courante de chaque championnat disponible en base.", ["Multi-ligues", "Zones UEFA", "Instantane live"], "pages/3_LIVE_LEAGUES.py", "Live Leagues.png")
 
     if is_admin:
         bottom = st.columns(3)
-        _render_page_tile(bottom[0], "PLAYERS", "Effectif disponible en base avec les postes, nationalites et informations principales du club filtre.", ["Effectif", "Squad view", "Exploration"], "pages/2_PLAYERS.py", "Players.png")
-        _render_page_tile(bottom[1], "EUROPE", "Suivi UEFA dedie pour la Champions League, l Europa League et la Conference League.", ["UEFA", "Stages", "Fixtures"], "pages/6_EUROPE.py", None)
-        _render_page_tile(bottom[2], "MONITORING", "Sante de la plateforme: runs, qualite de donnees et indicateurs de fraicheur.", ["Runs", "DQ", "Observability"], "pages/4_MONITORING.py", "Monitoring.png")
+        _render_page_tile(bottom[0], "JOUEURS", "Effectif disponible en base avec les postes, nationalites et informations principales du club filtre.", ["Effectif", "Vue effectif", "Exploration"], "pages/2_PLAYERS.py", "Players.png")
+        _render_page_tile(bottom[1], "EUROPE", "Suivi UEFA dedie pour la Champions League, l Europa League et la Conference League.", ["UEFA", "Phases", "Calendrier"], "pages/6_EUROPE.py", None)
+        _render_page_tile(bottom[2], "MONITORING", "Sante de la plateforme: runs, qualite de donnees et indicateurs de fraicheur.", ["Runs", "DQ", "Observabilite"], "pages/4_MONITORING.py", "Monitoring.png")
     else:
         bottom = st.columns(2)
-        _render_page_tile(bottom[0], "PLAYERS", "Effectif disponible en base avec les postes, nationalites et informations principales du club filtre.", ["Effectif", "Squad view", "Exploration"], "pages/2_PLAYERS.py", "Players.png")
-        _render_page_tile(bottom[1], "EUROPE", "Suivi UEFA dedie pour la Champions League, l Europa League et la Conference League.", ["UEFA", "Stages", "Fixtures"], "pages/6_EUROPE.py", None)
+        _render_page_tile(bottom[0], "JOUEURS", "Effectif disponible en base avec les postes, nationalites et informations principales du club filtre.", ["Effectif", "Vue effectif", "Exploration"], "pages/2_PLAYERS.py", "Players.png")
+        _render_page_tile(bottom[1], "EUROPE", "Suivi UEFA dedie pour la Champions League, l Europa League et la Conference League.", ["UEFA", "Phases", "Calendrier"], "pages/6_EUROPE.py", None)
 
     extra = st.columns(2)
-    _render_page_tile(extra[0], "HISTORY", "Historique des classements par saison avec comparaison des champions.", ["Historique", "Saisons", "Top 4"], "pages/7_HISTORY.py", None)
+    _render_page_tile(extra[0], "HISTORIQUE", "Historique des classements par saison avec comparaison des champions.", ["Historique", "Saisons", "Top 4"], "pages/7_HISTORY.py", None)
     _render_page_tile(extra[1], "PREDICTION", "Module baseline de prediction de match (probabilites 1N2 + score).", ["Poisson", "1N2", "xG proxy"], "pages/9_PREDICTION.py", None)
 
 
 def _render_pipeline_quick_action() -> None:
     if not is_admin_authenticated():
         return
-    st.markdown("<div class='fdp-section-title'>Pipeline Control</div>", unsafe_allow_html=True)
+    st.markdown("<div class='fdp-section-title'>Controle pipeline</div>", unsafe_allow_html=True)
     status = get_pipeline_process_status()
     cols = st.columns([1, 1, 2])
-    cols[0].metric("Process", "Running" if status["running"] else "Idle")
+    cols[0].metric("Processus", "En cours" if status["running"] else "Inactif")
     cols[1].metric("PID", "-" if status["pid"] is None else str(status["pid"]))
     with cols[2]:
         clicked = st.button(

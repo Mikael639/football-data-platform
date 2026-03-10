@@ -51,14 +51,14 @@ def _format_kickoff(value: object, fallback: object) -> str:
 def _format_match_label(row: pd.Series) -> str:
     kickoff = _format_kickoff(row.get("match_ts"), None)
     status = str(row.get("status") or "UNKNOWN")
-    competition = str(row.get("competition_name") or "Competition")
+    competition = str(row.get("competition_name") or "Championnat")
     season = str(row.get("season") or "-")
     return f"[{competition} | {season}] {row['home_team']} vs {row['away_team']} ({kickoff}, {status})"
 
 
 def _build_detail_label(detail: dict[str, object]) -> str:
     kickoff = _format_kickoff(detail.get("kickoff_utc"), detail.get("match_date"))
-    competition = str(detail.get("competition_name") or "Competition")
+    competition = str(detail.get("competition_name") or "Championnat")
     season = str(detail.get("season") or "-")
     status = str(detail.get("status") or "UNKNOWN")
     return f"[{competition} | {season}] {detail['home_team']} vs {detail['away_team']} ({kickoff}, {status})"
@@ -97,14 +97,14 @@ def _render_picker(selected_match_id: int | None) -> int | None:
 
     options["match_ts"] = pd.to_datetime(options.get("match_ts"), errors="coerce", utc=True)
     options["status"] = options["status"].fillna("UNKNOWN").astype(str)
-    options["competition_name"] = options["competition_name"].fillna("Competition").astype(str)
+    options["competition_name"] = options["competition_name"].fillna("Championnat").astype(str)
     options["season"] = options["season"].fillna("-").astype(str)
 
     with st.expander("Changer de match", expanded=False):
         st.caption("Utilise ce selecteur seulement si tu veux quitter le match ouvert depuis TEAM ou OVERVIEW.")
         filters = st.columns(3)
         competition_labels = ["Toutes"] + sorted(options["competition_name"].dropna().astype(str).unique().tolist())
-        selected_competition = filters[0].selectbox("Competition", competition_labels, key="match_detail_filter_competition")
+        selected_competition = filters[0].selectbox("Championnat", competition_labels, key="match_detail_filter_competition")
 
         scoped = options.copy()
         if selected_competition != "Toutes":
@@ -149,7 +149,7 @@ def _render_picker(selected_match_id: int | None) -> int | None:
         )
         picked_match_id = int(picked_match_id)
 
-        if st.button("Load selected match", key="match_detail_load_selected"):
+        if st.button("Charger le match selectionne", key="match_detail_load_selected"):
             st.session_state["selected_match_id"] = picked_match_id
             st.query_params["match_id"] = str(picked_match_id)
             st.rerun()
@@ -364,10 +364,10 @@ def main() -> None:
         pd.DataFrame(
             [
                 {
-                    "Competition": detail["competition_name"],
-                    "Season": detail["season"],
-                    "Matchday": "--" if pd.isna(detail.get("matchday")) else int(detail["matchday"]),
-                    "Status": detail.get("status") or "UNKNOWN",
+                    "Championnat": detail["competition_name"],
+                    "Saison": detail["season"],
+                    "Journee": "--" if pd.isna(detail.get("matchday")) else int(detail["matchday"]),
+                    "Statut": detail.get("status") or "UNKNOWN",
                 }
             ]
         ),
@@ -383,20 +383,20 @@ def main() -> None:
         date_end=None,
     )
 
-    render_section_heading("Form comparison", "Lecture rapide de la dynamique recente des deux clubs avant ce match.")
+    render_section_heading("Comparaison de forme", "Lecture rapide de la dynamique recente des deux clubs avant ce match.")
     form_left, form_right = st.columns(2)
     home_form = _recent_form(all_matches, int(detail["home_team_id"]))
     away_form = _recent_form(all_matches, int(detail["away_team_id"]))
     with form_left:
         st.caption(detail["home_team"])
         render_result_strip(home_form)
-        st.metric("Points on last 5", sum(3 if result == "W" else 1 if result == "D" else 0 for result in home_form))
+        st.metric("Points sur les 5 derniers", sum(3 if result == "W" else 1 if result == "D" else 0 for result in home_form))
     with form_right:
         st.caption(detail["away_team"])
         render_result_strip(away_form)
-        st.metric("Points on last 5", sum(3 if result == "W" else 1 if result == "D" else 0 for result in away_form))
+        st.metric("Points sur les 5 derniers", sum(3 if result == "W" else 1 if result == "D" else 0 for result in away_form))
 
-    render_section_heading("Home vs Away split", "Performance du club a domicile et de l'adversaire a l'exterieur sur la saison.")
+    render_section_heading("Domicile vs exterieur", "Performance du club a domicile et de l adversaire a l exterieur sur la saison.")
     split_left, split_right = st.columns(2)
     home_split = get_home_away_split(int(detail["competition_id"]), str(detail["season"]), int(detail["home_team_id"]), None)
     away_split = get_home_away_split(int(detail["competition_id"]), str(detail["season"]), int(detail["away_team_id"]), None)
