@@ -1718,7 +1718,7 @@ def fetch_laliga_teams_live(competition_code: str, season_start_year: int):
 def fetch_live_team_squad(team_id: int):
     players = get_players(team_id)
     if players.empty:
-        return pd.DataFrame(), "No players available in local database"
+        return pd.DataFrame(), "Aucun joueur disponible dans la base locale"
     return players, None
 
 
