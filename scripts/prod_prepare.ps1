@@ -28,6 +28,9 @@ if (-not (Test-Path "secrets")) {
 $superuserPath = "secrets/postgres_superuser_password.txt"
 $writerPath = "secrets/db_writer_password.txt"
 $readerPath = "secrets/db_reader_password.txt"
+$footballDataTokenPath = "secrets/football_data_token.txt"
+$supabaseDbUrlPath = "secrets/supabase_db_url.txt"
+$studySupabaseDbUrlPath = "secrets/study_supabase_db_url.txt"
 
 if (-not (Test-Path $superuserPath)) {
     Set-Content -Path $superuserPath -NoNewline -Value (New-RandomSecret)
@@ -37,6 +40,15 @@ if (-not (Test-Path $writerPath)) {
 }
 if (-not (Test-Path $readerPath)) {
     Set-Content -Path $readerPath -NoNewline -Value (New-RandomSecret)
+}
+if (-not (Test-Path $footballDataTokenPath)) {
+    Set-Content -Path $footballDataTokenPath -NoNewline -Value ""
+}
+if (-not (Test-Path $supabaseDbUrlPath)) {
+    Set-Content -Path $supabaseDbUrlPath -NoNewline -Value ""
+}
+if (-not (Test-Path $studySupabaseDbUrlPath)) {
+    Set-Content -Path $studySupabaseDbUrlPath -NoNewline -Value ""
 }
 
 if ([string]::IsNullOrWhiteSpace($BasicAuthPassword)) {

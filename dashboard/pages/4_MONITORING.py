@@ -49,16 +49,16 @@ def _format_duration_ms(value: Any) -> str:
 def _freshness_label(value: Any) -> str:
     timestamp = pd.to_datetime(value, errors="coerce", utc=True)
     if pd.isna(timestamp):
-        return "Unknown"
+        return "Inconnue"
     now = datetime.now(timezone.utc)
     delta = now - timestamp.to_pydatetime()
     hours = int(delta.total_seconds() // 3600)
     if hours < 1:
-        return "Updated less than 1h ago"
+        return "Mise a jour il y a moins de 1h"
     if hours < 24:
-        return f"Updated {hours}h ago"
+        return f"Mise a jour il y a {hours}h"
     days = hours // 24
-    return f"Updated {days}d ago"
+    return f"Mise a jour il y a {days}j"
 
 
 def _is_recent_started(run: pd.Series, max_hours: int = 2) -> bool:
@@ -77,13 +77,13 @@ def _health_summary(runs: pd.DataFrame, dq_checks: pd.DataFrame) -> dict[str, An
     fail_count = int((dq_checks["status"] == "FAIL").sum()) if not dq_checks.empty else 0
     warn_count = int((dq_checks["status"] == "WARN").sum()) if not dq_checks.empty else 0
     if latest_status == "FAILED" or fail_count > 0:
-        health = "Attention required"
+        health = "Attention requise"
         severity = "FAIL"
     elif warn_count > 0:
-        health = "Watch list"
+        health = "Sous surveillance"
         severity = "WARN"
     else:
-        health = "Healthy"
+        health = "Saine"
         severity = "PASS"
     return {
         "health": health,
@@ -96,17 +96,17 @@ def _health_summary(runs: pd.DataFrame, dq_checks: pd.DataFrame) -> dict[str, An
 
 def _render_health_hero(summary: dict[str, Any]) -> None:
     latest_run = summary["latest_run"]
-    st.markdown("<div class='fdp-section-title'>Platform Health</div>", unsafe_allow_html=True)
+    st.markdown("<div class='fdp-section-title'>Sante de la plateforme</div>", unsafe_allow_html=True)
     hero_left, hero_right = st.columns([4, 1], vertical_alignment="center")
     with hero_left:
         st.markdown(
             f"""
             <div class="fdp-hero">
-              <div class="fdp-hero-title">Current platform status: {summary["health"]}</div>
+              <div class="fdp-hero-title">Statut actuel de la plateforme: {summary["health"]}</div>
               <div class="fdp-hero-sub">
-                Last pipeline run at {_format_timestamp(latest_run["started_at"])}.
+                Dernier run pipeline a {_format_timestamp(latest_run["started_at"])}.
                 {_freshness_label(latest_run["started_at"])}.
-                Use this page to confirm the data is up to date before reading the dashboard.
+                Utilisez cette page pour verifier la fraicheur des donnees avant de lire le dashboard.
               </div>
             </div>
             """,
@@ -120,14 +120,14 @@ def _render_summary_metrics(summary: dict[str, Any]) -> None:
     latest_run = summary["latest_run"]
     volumes = latest_run.get("volumes", {}) or {}
     cards = [
-        ("Platform status", summary["health"], str(latest_run["status"])),
-        ("Last update", _freshness_label(latest_run["started_at"]), _format_timestamp(latest_run["started_at"])),
-        ("Pipeline duration", _format_duration_ms(latest_run["duration_ms"]), "Latest successful execution"),
-        ("Matches loaded", str(int(volumes.get("rows_fact_match", 0))), "Fact table rows currently persisted"),
-        ("Standings rows", str(int(volumes.get("rows_fact_standings_snapshot", 0))), "Snapshots available for dashboard standings"),
-        ("DQ fails", str(summary["fail_count"]), "Blocking quality issues on latest run"),
-        ("DQ warnings", str(summary["warn_count"]), "Non-blocking quality alerts"),
-        ("Rows loaded", str(int(latest_run["loaded_count"]) if pd.notna(latest_run["loaded_count"]) else 0), "All rows written during latest run"),
+        ("Statut plateforme", summary["health"], str(latest_run["status"])),
+        ("Derniere mise a jour", _freshness_label(latest_run["started_at"]), _format_timestamp(latest_run["started_at"])),
+        ("Duree pipeline", _format_duration_ms(latest_run["duration_ms"]), "Derniere execution reussie"),
+        ("Matchs charges", str(int(volumes.get("rows_fact_match", 0))), "Lignes de table de faits actuellement stockees"),
+        ("Lignes classement", str(int(volumes.get("rows_fact_standings_snapshot", 0))), "Snapshots disponibles pour les classements du dashboard"),
+        ("DQ en echec", str(summary["fail_count"]), "Problemes qualite bloquants sur le dernier run"),
+        ("Avertissements DQ", str(summary["warn_count"]), "Alertes qualite non bloquantes"),
+        ("Lignes chargees", str(int(latest_run["loaded_count"]) if pd.notna(latest_run["loaded_count"]) else 0), "Total de lignes ecrites lors du dernier run"),
     ]
     for start in range(0, len(cards), 4):
         cols = st.columns(4)
@@ -175,12 +175,12 @@ def _render_run_diff(runs: pd.DataFrame) -> None:
     delta_standings_rows = standings_rows_latest - standings_rows_prev
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Loaded", loaded_latest, delta_loaded)
-    c2.metric("Extracted", extracted_latest, delta_extracted)
-    c3.metric("Duration", _format_duration_ms(duration_latest), _format_duration_ms(delta_duration_ms))
+    c1.metric("Charge", loaded_latest, delta_loaded)
+    c2.metric("Extrait", extracted_latest, delta_extracted)
+    c3.metric("Duree", _format_duration_ms(duration_latest), _format_duration_ms(delta_duration_ms))
     c4.metric("Rows fact_match", match_rows_latest, delta_match_rows)
     c5.metric("Rows standings", standings_rows_latest, delta_standings_rows)
-    c6.metric("Status", str(latest.get("status")), f"prev: {str(previous.get('status'))}")
+    c6.metric("Statut", str(latest.get("status")), f"prec.: {str(previous.get('status'))}")
 
     diff_df = pd.DataFrame(
         [
@@ -205,10 +205,10 @@ def _render_run_diff(runs: pd.DataFrame) -> None:
 
 
 def _render_pipeline_control() -> None:
-    render_section_heading("Pipeline control", "Lance une execution pipeline en arriere-plan depuis cette app.")
+    render_section_heading("Controle pipeline", "Lancez une execution pipeline en arriere-plan depuis cette app.")
     status = get_pipeline_process_status()
     c1, c2, c3 = st.columns([1, 1, 2])
-    c1.metric("Process", "Running" if status["running"] else "Idle")
+    c1.metric("Processus", "En cours" if status["running"] else "Inactif")
     c2.metric("PID", "-" if status["pid"] is None else str(status["pid"]))
     with c3:
         run_clicked = st.button(
@@ -237,26 +237,26 @@ def _render_simple_explanation(summary: dict[str, Any]) -> None:
     latest_run = summary["latest_run"]
     status = str(latest_run["status"])
     if status == "FAILED":
-        st.error("The last pipeline run failed. The dashboard may show stale or incomplete data.")
+        st.error("Le dernier run pipeline a echoue. Le dashboard peut afficher des donnees obsoletes ou incompletes.")
         return
     if summary["fail_count"] > 0:
-        st.error("The pipeline completed, but some quality checks failed. Review the alert section below.")
+        st.error("Le pipeline est termine, mais certains controles qualite ont echoue. Verifiez la section alertes.")
         return
     if summary["warn_count"] > 0:
-        st.warning("The pipeline completed with warnings. The dashboard is usable, but some data should be reviewed.")
+        st.warning("Le pipeline est termine avec avertissements. Le dashboard est utilisable, mais certaines donnees doivent etre revues.")
         return
-    st.success("The latest run completed successfully and no quality check is currently failing.")
+    st.success("Le dernier run est termine avec succes et aucun controle qualite n est en echec.")
 
 
 def _render_alerts(dq_checks: pd.DataFrame) -> None:
     render_section_heading("Alerts")
     if dq_checks.empty:
-        st.info("No data quality checks are available for the latest run.")
+        st.info("Aucun controle qualite n est disponible pour le dernier run.")
         return
 
     alerts = dq_checks[dq_checks["status"].isin(["FAIL", "WARN"])].copy()
     if alerts.empty:
-        st.success("No active warning or failure detected on the latest run.")
+        st.success("Aucun avertissement ni echec actif detecte sur le dernier run.")
         return
 
     alert_view = alerts[["status", "check_name", "details", "created_at"]].copy()
@@ -271,14 +271,14 @@ def _render_alerts(dq_checks: pd.DataFrame) -> None:
 
 
 def _render_recent_runs_gallery(runs: pd.DataFrame) -> None:
-    render_section_heading("Recent Runs")
+    render_section_heading("Runs recents")
     successful_runs = runs[runs["status"].astype(str) == "SUCCESS"].head(3).copy()
     issue_runs = runs[runs["status"].astype(str) == "FAILED"].head(2).copy()
     active_runs = runs[runs.apply(_is_recent_started, axis=1)].head(1).copy()
 
-    render_section_heading("Successful Updates")
+    render_section_heading("Mises a jour reussies")
     if successful_runs.empty:
-        st.info("No successful update available yet.")
+        st.info("Aucune mise a jour reussie disponible pour le moment.")
     else:
         success_labels = ["Latest update", "Previous update", "Earlier update"]
         cols = st.columns(len(successful_runs))
@@ -287,32 +287,32 @@ def _render_recent_runs_gallery(runs: pd.DataFrame) -> None:
                 with st.container(border=True):
                     st.markdown(f"**{label}**")
                     st.markdown(render_badge("SUCCESS"), unsafe_allow_html=True)
-                    st.caption(f"Started: {_format_timestamp(run['started_at'])}")
-                    st.caption(f"Duration: {_format_duration_ms(run['duration_ms'])}")
-                    st.caption(f"Loaded: {int(run['loaded_count']) if pd.notna(run['loaded_count']) else 0} rows")
-                    st.caption(f"Extracted: {int(run['extracted_count']) if pd.notna(run['extracted_count']) else 0} rows")
+                    st.caption(f"Debut: {_format_timestamp(run['started_at'])}")
+                    st.caption(f"Duree: {_format_duration_ms(run['duration_ms'])}")
+                    st.caption(f"Charge: {int(run['loaded_count']) if pd.notna(run['loaded_count']) else 0} lignes")
+                    st.caption(f"Extrait: {int(run['extracted_count']) if pd.notna(run['extracted_count']) else 0} lignes")
                     st.caption(f"Technical id: {str(run['run_id'])[:8]}")
 
     if not issue_runs.empty or not active_runs.empty:
-        render_section_heading("Recent Issues")
+        render_section_heading("Incidents recents")
         issue_cards = pd.concat([active_runs, issue_runs], ignore_index=True)
         cols = st.columns(len(issue_cards))
         for col, (_, run) in zip(cols, issue_cards.iterrows()):
             with col:
                 with st.container(border=True):
                     status = str(run["status"])
-                    title = "Run in progress" if status == "STARTED" else "Recent failure"
+                    title = "Run en cours" if status == "STARTED" else "Echec recent"
                     st.markdown(f"**{title}**")
                     st.markdown(render_badge(status), unsafe_allow_html=True)
-                    st.caption(f"Started: {_format_timestamp(run['started_at'])}")
-                    st.caption(f"Duration: {_format_duration_ms(run['duration_ms'])}")
-                    st.caption(f"Loaded: {int(run['loaded_count']) if pd.notna(run['loaded_count']) else 0} rows")
-                    st.caption(f"Extracted: {int(run['extracted_count']) if pd.notna(run['extracted_count']) else 0} rows")
+                    st.caption(f"Debut: {_format_timestamp(run['started_at'])}")
+                    st.caption(f"Duree: {_format_duration_ms(run['duration_ms'])}")
+                    st.caption(f"Charge: {int(run['loaded_count']) if pd.notna(run['loaded_count']) else 0} lignes")
+                    st.caption(f"Extrait: {int(run['extracted_count']) if pd.notna(run['extracted_count']) else 0} lignes")
                     st.caption(f"Technical id: {str(run['run_id'])[:8]}")
 
 
 def _render_run_details(runs: pd.DataFrame) -> str:
-    render_section_heading("Technical Detail", "Detailed execution logs for admins, devs and data maintainers.")
+    render_section_heading("Details techniques", "Journaux d execution detaillees pour admins, devs et mainteneurs data.")
 
     runs_display = runs.copy()
     runs_display["started_at"] = runs_display["started_at"].map(_format_timestamp)
@@ -337,27 +337,27 @@ def _render_run_details(runs: pd.DataFrame) -> str:
         key="monitoring_export_runs",
     )
 
-    return st.selectbox("Run to inspect", runs["run_id"].astype(str).tolist())
+    return st.selectbox("Run a inspecter", runs["run_id"].astype(str).tolist())
 
 
 def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
     selected = runs[runs["run_id"].astype(str) == run_id].iloc[0]
     cols = st.columns([1, 1, 1, 1])
     cols[0].metric("Run", run_id[:8])
-    cols[1].metric("Started", _format_timestamp(selected["started_at"]))
-    cols[2].metric("Duration", _format_duration_ms(selected["duration_ms"]))
+    cols[1].metric("Debut", _format_timestamp(selected["started_at"]))
+    cols[2].metric("Duree", _format_duration_ms(selected["duration_ms"]))
     with cols[3]:
         render_status_badge(str(selected["status"]))
 
-    render_section_heading("Run Summary", "Readable snapshot of the selected execution.")
+    render_section_heading("Resume du run", "Vue lisible de l execution selectionnee.")
     metrics = selected.get("metrics", {}) or {}
     volumes = selected.get("volumes", {}) or {}
 
     summary_cols = st.columns(4)
-    summary_cols[0].metric("Status", str(selected["status"]))
-    summary_cols[1].metric("Extracted", int(selected["extracted_count"]) if pd.notna(selected["extracted_count"]) else 0)
-    summary_cols[2].metric("Loaded", int(selected["loaded_count"]) if pd.notna(selected["loaded_count"]) else 0)
-    summary_cols[3].metric("Last update", _freshness_label(selected["started_at"]))
+    summary_cols[0].metric("Statut", str(selected["status"]))
+    summary_cols[1].metric("Extrait", int(selected["extracted_count"]) if pd.notna(selected["extracted_count"]) else 0)
+    summary_cols[2].metric("Charge", int(selected["loaded_count"]) if pd.notna(selected["loaded_count"]) else 0)
+    summary_cols[3].metric("Derniere mise a jour", _freshness_label(selected["started_at"]))
 
     timing_cols = st.columns(5)
     timing_cols[0].metric("Extract", _format_duration_ms(metrics.get("extract_ms")))
@@ -373,30 +373,30 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
         "DQ": int(metrics.get("dq_ms") or 0),
     }
     total_timing = sum(timing_values.values()) or 1
-    render_section_heading("Timing Breakdown")
+    render_section_heading("Repartition des temps")
     timing_df = pd.DataFrame(
         {
-            "Step": list(timing_values.keys()),
-            "Duration (ms)": list(timing_values.values()),
+            "Etape": list(timing_values.keys()),
+            "Duree (ms)": list(timing_values.values()),
         }
     )
-    timing_df["Share"] = timing_df["Duration (ms)"] / total_timing
-    st.bar_chart(timing_df.set_index("Step")["Duration (ms)"], use_container_width=True)
+    timing_df["Part"] = timing_df["Duree (ms)"] / total_timing
+    st.bar_chart(timing_df.set_index("Etape")["Duree (ms)"], use_container_width=True)
 
     volume_cols = st.columns(4)
-    volume_cols[0].metric("Teams", int(volumes.get("rows_dim_team", 0)))
-    volume_cols[1].metric("Players", int(volumes.get("rows_dim_player", 0)))
-    volume_cols[2].metric("Matches", int(volumes.get("rows_fact_match", 0)))
-    volume_cols[3].metric("Standings", int(volumes.get("rows_fact_standings_snapshot", 0)))
+    volume_cols[0].metric("Equipes", int(volumes.get("rows_dim_team", 0)))
+    volume_cols[1].metric("Joueurs", int(volumes.get("rows_dim_player", 0)))
+    volume_cols[2].metric("Matchs", int(volumes.get("rows_fact_match", 0)))
+    volume_cols[3].metric("Classements", int(volumes.get("rows_fact_standings_snapshot", 0)))
 
     error_message = str(selected.get("error_message") or "").strip()
     if error_message:
         st.error(error_message)
 
     dq_checks = get_dq_checks(run_id=run_id, limit=100)
-    render_section_heading("Data Quality Checks", "Checks persisted for the selected pipeline run.")
+    render_section_heading("Controles qualite des donnees", "Controles enregistres pour le run pipeline selectionne.")
     if dq_checks.empty:
-        st.info("No quality check stored for this run.")
+        st.info("Aucun controle qualite enregistre pour ce run.")
         return
 
     dq_display = dq_checks.copy()
@@ -408,7 +408,7 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
 
     headline_alerts = dq_display[dq_display["status"].isin(["FAIL", "WARN"])].head(5)
     if not headline_alerts.empty:
-        st.warning("Priority checks need attention before trusting all dashboard views.")
+        st.warning("Des controles prioritaires demandent une verification avant de faire confiance a toutes les vues du dashboard.")
         st.dataframe(
             style_monitoring_table(
                 headline_alerts[["created_at", "check_name", "status", "severity", "metric_value", "threshold", "details"]]
@@ -426,12 +426,12 @@ def _render_selected_run(run_id: str, runs: pd.DataFrame) -> None:
     )
     render_csv_download(
         df=dq_display[["created_at", "check_name", "status", "severity", "metric_value", "threshold", "details"]],
-        label="Export quality checks (CSV)",
+        label="Export controles qualite (CSV)",
         filename=f"monitoring_dq_{run_id[:8]}.csv",
         key=f"monitoring_export_dq_{run_id}",
     )
 
-    with st.expander("Raw technical payload"):
+    with st.expander("Payload technique brut"):
         st.code(_format_json(metrics), language="json")
         st.code(_format_json(volumes), language="json")
 
@@ -441,7 +441,7 @@ def main() -> None:
     render_admin_access_sidebar("monitoring")
     render_page_banner(
         "MONITORING",
-        "Health page for the data platform: start with the summary, then open the technical details if needed.",
+        "Page sante de la plateforme data: commencez par le resume, puis ouvrez les details techniques si besoin.",
         "Monitoring.png",
     )
     if not require_admin_access("MONITORING"):
@@ -449,19 +449,19 @@ def main() -> None:
     render_note_card("Monitoring sert a confirmer que les donnees affichees dans le dashboard sont fraiches, chargees et controlees.")
     _render_pipeline_control()
 
-    if st.button("Refresh"):
+    if st.button("Rafraichir"):
         st.cache_data.clear()
         st.rerun()
 
     runs = get_pipeline_runs(limit=25)
     if runs.empty:
-        st.info("No pipeline run is available yet.")
+        st.info("Aucun run pipeline n est encore disponible.")
         return
 
     latest_run_id = str(runs.iloc[0]["run_id"])
     latest_checks = get_dq_checks(run_id=latest_run_id, limit=100)
     summary = _health_summary(runs, latest_checks)
-    summary_tab, detail_tab = st.tabs(["Summary", "Technical Detail"])
+    summary_tab, detail_tab = st.tabs(["Resume", "Details techniques"])
 
     with summary_tab:
         _render_health_hero(summary)
