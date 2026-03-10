@@ -65,9 +65,9 @@ Sur Oracle Cloud Infrastructure :
 5. Sur la VM, exportez les OCID des secrets puis lancez :
 
 ```bash
-export FOOTBALL_DATA_TOKEN_SECRET_OCID="ocid1.vaultsecret.oc1..."
-export SUPABASE_DB_URL_SECRET_OCID="ocid1.vaultsecret.oc1..."
-export STUDY_SUPABASE_DB_URL_SECRET_OCID="ocid1.vaultsecret.oc1..."
+export FOOTBALL_DATA_TOKEN_SECRET_OCID="<your-football-data-token-secret-ocid>"
+export SUPABASE_DB_URL_SECRET_OCID="<your-supabase-db-url-secret-ocid>"
+export STUDY_SUPABASE_DB_URL_SECRET_OCID="<your-study-supabase-db-url-secret-ocid>"
 bash scripts/oci_vault_sync.sh
 ```
 
