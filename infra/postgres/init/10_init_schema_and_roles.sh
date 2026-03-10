@@ -6,21 +6,27 @@ if [ -z "${DB_WRITER_USER:-}" ] || [ -z "${DB_READER_USER:-}" ]; then
   exit 1
 fi
 
-if [ -z "${DB_WRITER_PASSWORD_FILE:-}" ] || [ -z "${DB_READER_PASSWORD_FILE:-}" ]; then
-  echo "DB_WRITER_PASSWORD_FILE and DB_READER_PASSWORD_FILE are required." >&2
-  exit 1
+DB_WRITER_PASSWORD="${DB_WRITER_PASSWORD:-}"
+DB_READER_PASSWORD="${DB_READER_PASSWORD:-}"
+
+if [ -z "${DB_WRITER_PASSWORD}" ] && [ -n "${DB_WRITER_PASSWORD_FILE:-}" ]; then
+  if [ ! -f "${DB_WRITER_PASSWORD_FILE}" ]; then
+    echo "Database writer password secret file missing." >&2
+    exit 1
+  fi
+  DB_WRITER_PASSWORD="$(tr -d '\r\n' < "${DB_WRITER_PASSWORD_FILE}")"
 fi
 
-if [ ! -f "${DB_WRITER_PASSWORD_FILE}" ] || [ ! -f "${DB_READER_PASSWORD_FILE}" ]; then
-  echo "Database password secret file missing." >&2
-  exit 1
+if [ -z "${DB_READER_PASSWORD}" ] && [ -n "${DB_READER_PASSWORD_FILE:-}" ]; then
+  if [ ! -f "${DB_READER_PASSWORD_FILE}" ]; then
+    echo "Database reader password secret file missing." >&2
+    exit 1
+  fi
+  DB_READER_PASSWORD="$(tr -d '\r\n' < "${DB_READER_PASSWORD_FILE}")"
 fi
-
-DB_WRITER_PASSWORD="$(tr -d '\r\n' < "${DB_WRITER_PASSWORD_FILE}")"
-DB_READER_PASSWORD="$(tr -d '\r\n' < "${DB_READER_PASSWORD_FILE}")"
 
 if [ -z "${DB_WRITER_PASSWORD}" ] || [ -z "${DB_READER_PASSWORD}" ]; then
-  echo "Database password secret file cannot be empty." >&2
+  echo "Database writer and reader passwords are required." >&2
   exit 1
 fi
 

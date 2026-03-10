@@ -82,7 +82,7 @@ def render_global_filters(page_key: str, forced_season: str | None = None) -> Da
                 default_label = str(favorite_competition_label)
         st.session_state[competition_key] = default_label
     selected_competition = st.sidebar.selectbox(
-        "Competition",
+        "Championnat",
         competition_labels,
         key=competition_key,
         disabled=len(competition_labels) <= 1,
@@ -136,8 +136,8 @@ def render_global_filters(page_key: str, forced_season: str | None = None) -> Da
         fav_team_id = st.session_state.get(FAV_TEAM_ID_KEY)
         fav_competition_label = _label_for_value(competition_map, fav_competition_id) or "Aucune"
         fav_team_label = _label_for_value(team_map, fav_team_id) or "Aucun"
-        st.caption(f"Competition favorite: {fav_competition_label}")
-        st.caption(f"Club favori: {fav_team_label}")
+        st.caption(f"Championnat favori : {fav_competition_label}")
+        st.caption(f"Club favori : {fav_team_label}")
         save_key = f"{page_key}_save_favorites"
         clear_key = f"{page_key}_clear_favorites"
         if st.button("Enregistrer le filtre courant", key=save_key, use_container_width=True):
@@ -177,5 +177,5 @@ def render_global_filters(page_key: str, forced_season: str | None = None) -> Da
 def require_team_selection(filters: DashboardFilters) -> DashboardFilters | None:
     if filters.team_id is not None:
         return filters
-    st.info("Selectionne un club dans la barre laterale pour afficher cette page.")
+    st.info("Selectionnez un club dans la barre laterale pour afficher cette page.")
     return None

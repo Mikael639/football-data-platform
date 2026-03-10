@@ -1,0 +1,10 @@
+title = "football-data-platform gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow OCI Vault placeholder values used in docs and examples"
+regexes = [
+  '''ocid1\.vaultsecret\.oc1\.{3}''',
+]

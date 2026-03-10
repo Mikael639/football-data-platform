@@ -24,10 +24,10 @@ def is_admin_authenticated() -> bool:
 
 
 def render_admin_access_sidebar(key_prefix: str = "admin_access") -> None:
-    with st.sidebar.expander("Admin access", expanded=False):
+    with st.sidebar.expander("Acces admin", expanded=False):
         if is_admin_authenticated():
             current_user = str(st.session_state.get(ADMIN_USER_KEY, _admin_username()))
-            st.success(f"Connecte en admin ({current_user})")
+            st.success(f"Connecte en administrateur ({current_user})")
             if st.button("Se deconnecter", key=f"{key_prefix}_logout", use_container_width=True):
                 st.session_state[ADMIN_AUTH_KEY] = False
                 st.session_state[ADMIN_USER_KEY] = ""
@@ -55,6 +55,6 @@ def render_admin_access_sidebar(key_prefix: str = "admin_access") -> None:
 def require_admin_access(page_name: str = "Cette page") -> bool:
     if is_admin_authenticated():
         return True
-    st.warning(f"Acces admin requis pour {page_name}.")
-    st.info("Utilise le panneau `Admin access` dans la sidebar pour te connecter.")
+    st.warning(f"Acces administrateur requis pour {page_name}.")
+    st.info("Utilisez le panneau `Acces admin` dans la barre laterale pour vous connecter.")
     return False

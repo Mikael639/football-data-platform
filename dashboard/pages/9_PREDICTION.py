@@ -131,8 +131,8 @@ def _compute_upcoming_predictions(matches: pd.DataFrame, limit: int) -> pd.DataF
         )
         rows.append(
             {
-                "Kickoff (Paris)": _kickoff_label(fixture),
-                "Competition": str(fixture.get("competition_name") or ""),
+                "Coup d envoi (Paris)": _kickoff_label(fixture),
+                "Championnat": str(fixture.get("competition_name") or ""),
                 "Saison": str(fixture.get("season") or ""),
                 "Match": f"{fixture['home_team']} vs {fixture['away_team']}",
                 "1 (%)": round(home_win * 100, 1),
@@ -169,7 +169,7 @@ def _calibrate_baseline_model(matches: pd.DataFrame, min_train_matches: int = 30
 
     played = matches.dropna(subset=["home_score", "away_score"]).copy()
     if played.empty or len(played.index) < (min_train_matches + 5):
-        return {"count": 0, "accuracy_pct": None, "brier": None, "logloss": None, "level": "Insufficient data"}, pd.DataFrame()
+        return {"count": 0, "accuracy_pct": None, "brier": None, "logloss": None, "level": "Donnees insuffisantes"}, pd.DataFrame()
 
     played["kickoff_sort"] = pd.to_datetime(played["kickoff_utc"], errors="coerce", utc=True).dt.tz_convert(None)
     played["kickoff_sort"] = played["kickoff_sort"].fillna(pd.to_datetime(played["date_dt"], errors="coerce"))
@@ -199,12 +199,12 @@ def _calibrate_baseline_model(matches: pd.DataFrame, min_train_matches: int = 30
 
         records.append(
             {
-                "Kickoff (Paris)": _kickoff_label(row),
-                "Competition": str(row.get("competition_name") or ""),
+                "Coup d envoi (Paris)": _kickoff_label(row),
+                "Championnat": str(row.get("competition_name") or ""),
                 "Match": f"{row['home_team']} vs {row['away_team']}",
-                "Pred": predicted,
-                "Actual": actual,
-                "P(actual) %": round(p_actual * 100, 1),
+                "Pred.": predicted,
+                "Reel": actual,
+                "P(reel) %": round(p_actual * 100, 1),
                 "Brier": round(float(brier), 4),
                 "LogLoss": round(float(logloss), 4),
                 "Correct": 1 if predicted == actual else 0,
@@ -212,13 +212,13 @@ def _calibrate_baseline_model(matches: pd.DataFrame, min_train_matches: int = 30
         )
 
     if not records:
-        return {"count": 0, "accuracy_pct": None, "brier": None, "logloss": None, "level": "Insufficient data"}, pd.DataFrame()
+        return {"count": 0, "accuracy_pct": None, "brier": None, "logloss": None, "level": "Donnees insuffisantes"}, pd.DataFrame()
 
     calibration = pd.DataFrame(records)
     accuracy_pct = float(calibration["Correct"].mean() * 100.0)
     brier_score = float(calibration["Brier"].mean())
     logloss_score = float(calibration["LogLoss"].mean())
-    level = "Good" if brier_score <= 0.20 else "Medium" if brier_score <= 0.26 else "Weak"
+    level = "Bon" if brier_score <= 0.20 else "Moyen" if brier_score <= 0.26 else "Faible"
     summary = {
         "count": int(len(calibration.index)),
         "accuracy_pct": round(accuracy_pct, 1),
@@ -226,7 +226,7 @@ def _calibrate_baseline_model(matches: pd.DataFrame, min_train_matches: int = 30
         "logloss": round(logloss_score, 4),
         "level": level,
     }
-    calibration = calibration.sort_values("Kickoff (Paris)", ascending=False).reset_index(drop=True)
+    calibration = calibration.sort_values("Coup d envoi (Paris)", ascending=False).reset_index(drop=True)
     return summary, calibration
 
 
@@ -306,21 +306,21 @@ def main() -> None:
     )
     calibration_summary, calibration_table = _calibrate_baseline_model(model_matches, min_train_matches=30)
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Matches eval", int(calibration_summary["count"]))
+    c1.metric("Matchs evalues", int(calibration_summary["count"]))
     c2.metric(
-        "Accuracy",
+        "Precision",
         "-" if calibration_summary["accuracy_pct"] is None else f"{calibration_summary['accuracy_pct']}%",
     )
     c3.metric("Brier", "-" if calibration_summary["brier"] is None else f"{calibration_summary['brier']}")
     c4.metric("LogLoss", "-" if calibration_summary["logloss"] is None else f"{calibration_summary['logloss']}")
-    c5.metric("Level", str(calibration_summary["level"]))
+    c5.metric("Niveau", str(calibration_summary["level"]))
     if calibration_table.empty:
         st.info("Pas assez de matchs termines pour calibrer le modele sur ce scope.")
     else:
         recent_calibration = calibration_table.head(20).copy()
         render_adaptive_table(
             recent_calibration[
-                ["Kickoff (Paris)", "Competition", "Match", "Pred", "Actual", "P(actual) %", "Brier", "LogLoss"]
+                ["Coup d envoi (Paris)", "Championnat", "Match", "Pred.", "Reel", "P(reel) %", "Brier", "LogLoss"]
             ],
             title="Dernieres evaluations",
             strong_columns={"Match"},
@@ -333,7 +333,7 @@ def main() -> None:
             key="prediction_export_calibration",
         )
 
-    with st.expander("Prediction manuelle d'une affiche (deplier/replier)", expanded=False):
+    with st.expander("Prediction manuelle d une affiche (deplier/replier)", expanded=False):
         teams = get_teams(effective_filters.competition_id, effective_filters.season)
         if teams.empty:
             st.info("Aucune equipe disponible pour ce filtre.")
@@ -345,10 +345,10 @@ def main() -> None:
 
         c1, c2 = st.columns(2)
         with c1:
-            home_team_name = st.selectbox("Home team", names, key="prediction_home_team")
+            home_team_name = st.selectbox("Equipe domicile", names, key="prediction_home_team")
         with c2:
             away_team_name = st.selectbox(
-                "Away team",
+                "Equipe exterieur",
                 names,
                 index=1 if len(names) > 1 else 0,
                 key="prediction_away_team",
@@ -368,12 +368,12 @@ def main() -> None:
         away_win = float(probs[probs["home_goals"] < probs["away_goals"]]["probability"].sum())
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Home win", f"{home_win * 100:.1f}%")
-        m2.metric("Draw", f"{draw * 100:.1f}%")
-        m3.metric("Away win", f"{away_win * 100:.1f}%")
+        m1.metric("Victoire domicile", f"{home_win * 100:.1f}%")
+        m2.metric("Match nul", f"{draw * 100:.1f}%")
+        m3.metric("Victoire exterieur", f"{away_win * 100:.1f}%")
         m4.metric("Score probable", f"{int(most_likely['home_goals'])}-{int(most_likely['away_goals'])}")
 
-        render_section_heading("Expected goals (baseline)")
+        render_section_heading("Buts attendus (baseline)")
         eg1, eg2 = st.columns(2)
         eg1.metric(f"xG {home_team_name}", f"{home_lambda:.2f}")
         eg2.metric(f"xG {away_team_name}", f"{away_lambda:.2f}")
