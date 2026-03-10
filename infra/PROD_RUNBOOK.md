@@ -59,7 +59,7 @@ Script: `infra/postgres/init/10_init_schema_and_roles.sh`
 
 ## 5) Container hardening
 
-- Pipeline and dashboard images run as non-root user (`uid 10001`).
+- Pipeline and dashboard images run as non-root user (`uid 1001`).
 - Runtime capabilities dropped in production compose (`cap_drop: ALL`).
 - `no-new-privileges` enabled.
 

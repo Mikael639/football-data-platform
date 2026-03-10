@@ -78,26 +78,10 @@ services:
     security_opt:
       - no-new-privileges:true
     secrets:
-      - source: db_writer_password
-        target: db_writer_password
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: football_data_token
-        target: football_data_token
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: supabase_db_url
-        target: supabase_db_url
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: study_supabase_db_url
-        target: study_supabase_db_url
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
+      - db_writer_password
+      - football_data_token
+      - supabase_db_url
+      - study_supabase_db_url
 
   pipeline_scheduler:
     build: .
@@ -153,26 +137,10 @@ services:
     security_opt:
       - no-new-privileges:true
     secrets:
-      - source: db_writer_password
-        target: db_writer_password
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: football_data_token
-        target: football_data_token
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: supabase_db_url
-        target: supabase_db_url
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: study_supabase_db_url
-        target: study_supabase_db_url
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
+      - db_writer_password
+      - football_data_token
+      - supabase_db_url
+      - study_supabase_db_url
 
   dashboard:
     build:
@@ -218,26 +186,10 @@ services:
     security_opt:
       - no-new-privileges:true
     secrets:
-      - source: db_reader_password
-        target: db_reader_password
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: football_data_token
-        target: football_data_token
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: supabase_db_url
-        target: supabase_db_url
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
-      - source: study_supabase_db_url
-        target: study_supabase_db_url
-        uid: "10001"
-        gid: "10001"
-        mode: 0400
+      - db_reader_password
+      - football_data_token
+      - supabase_db_url
+      - study_supabase_db_url
 
   proxy:
     image: caddy:2.8-alpine
