@@ -1,0 +1,32 @@
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=96MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - max_connections=20
+
+  pipeline:
+    profiles:
+      - manual-pipeline
+
+  pipeline_scheduler:
+    profiles:
+      - scheduler
+
+  dashboard:
+    command:
+      - streamlit
+      - run
+      - dashboard/app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.fileWatcherType=none
+      - --browser.gatherUsageStats=false

@@ -8,25 +8,25 @@ from ui.display import render_note_card, render_page_banner, render_section_head
 from ui.exports import render_csv_download
 from ui.styles import inject_dashboard_styles
 
-st.set_page_config(page_title="PLAYERS - Football Data Platform", layout="wide")
+st.set_page_config(page_title="JOUEURS - Football Data Platform", layout="wide")
 
 
 def main() -> None:
     inject_dashboard_styles()
     render_page_banner(
-        "PLAYERS",
-        "Squad view for exploring the players currently available for the selected club and competition.",
+        "JOUEURS",
+        "Vue effectif pour analyser les joueurs disponibles selon le club et la competition selectionnes.",
         "Players.png",
     )
     filters = render_global_filters("players")
-    render_note_card("Use the filters to narrow the squad view and inspect the players currently available for a club.")
+    render_note_card("Utilisez les filtres pour affiner l effectif et analyser les joueurs disponibles pour un club.")
 
     if filters.team_id is not None:
         render_team_header(get_team_meta(filters.team_id))
 
     players = get_players(filters.team_id, filters.competition_id, filters.season)
     if players.empty:
-        st.info("No players available for this filter.")
+        st.info("Aucun joueur disponible pour ce filtre.")
         return
 
     impact = get_player_impact_stats(filters.team_id, filters.competition_id, filters.season)
@@ -107,27 +107,27 @@ def main() -> None:
     scoped = scoped[scoped["minutes"] >= int(minutes_min)]
 
     if scoped.empty:
-        st.info("No players available with these filters.")
+        st.info("Aucun joueur disponible avec ces filtres.")
         return
 
     meta = scoped.copy()
     top = st.columns(3)
-    top[0].metric("Players", len(meta))
-    top[1].metric("Positions", meta["position"].fillna("-").replace("", "-").nunique())
-    top[2].metric("Nationalities", meta["nationality"].fillna("-").replace("", "-").nunique())
+    top[0].metric("Joueurs", len(meta))
+    top[1].metric("Postes", meta["position"].fillna("-").replace("", "-").nunique())
+    top[2].metric("Nationalites", meta["nationality"].fillna("-").replace("", "-").nunique())
 
-    render_section_heading("Top impact")
+    render_section_heading("Top impact offensif")
     impact_table = (
         scoped.sort_values(["goal_contrib_p90", "goal_contrib", "minutes"], ascending=[False, False, False])
         .rename(
             columns={
-                "full_name": "Player",
-                "team_name": "Team",
-                "position_clean": "Position",
-                "matches_played": "Matches",
+                "full_name": "Joueur",
+                "team_name": "Club",
+                "position_clean": "Poste",
+                "matches_played": "Matchs",
                 "minutes": "Minutes",
-                "goals": "Goals",
-                "assists": "Assists",
+                "goals": "Buts",
+                "assists": "Passes dec.",
                 "goal_contrib": "G+A",
                 "goal_contrib_p90": "G+A p90",
             }
@@ -136,41 +136,41 @@ def main() -> None:
     )
     impact_table["G+A p90"] = impact_table["G+A p90"].round(2)
     render_adaptive_table(
-        impact_table[["Player", "Team", "Position", "Matches", "Minutes", "Goals", "Assists", "G+A", "G+A p90"]],
-        title="Top impact players",
-        strong_columns={"Player"},
+        impact_table[["Joueur", "Club", "Poste", "Matchs", "Minutes", "Buts", "Passes dec.", "G+A", "G+A p90"]],
+        title="Top joueurs impact",
+        strong_columns={"Joueur"},
         max_height=620,
     )
     render_csv_download(
         df=impact_table,
-        label="Export top impact (CSV)",
+        label="Exporter top impact (CSV)",
         filename="players_top_impact.csv",
         key="players_export_top_impact",
     )
 
-    render_section_heading("Available squad")
+    render_section_heading("Effectif disponible")
     players_table = scoped.rename(
             columns={
-                "full_name": "Player",
-                "position": "Position",
-                "nationality": "Nationality",
-                "birth_date": "Birth date",
-                "team_name": "Team",
-                "matches_played": "Matches",
+                "full_name": "Joueur",
+                "position": "Poste",
+                "nationality": "Nationalite",
+                "birth_date": "Date de naissance",
+                "team_name": "Club",
+                "matches_played": "Matchs",
                 "minutes": "Minutes",
-                "goals": "Goals",
-                "assists": "Assists",
+                "goals": "Buts",
+                "assists": "Passes dec.",
             }
-        )[["Player", "Position", "Nationality", "Birth date", "Team", "Matches", "Minutes", "Goals", "Assists"]]
+        )[["Joueur", "Poste", "Nationalite", "Date de naissance", "Club", "Matchs", "Minutes", "Buts", "Passes dec."]]
     render_adaptive_table(
         players_table,
-        title="Squad list",
-        strong_columns={"Player"},
+        title="Liste de l effectif",
+        strong_columns={"Joueur"},
         max_height=980,
     )
     render_csv_download(
         df=players_table,
-        label="Export squad (CSV)",
+        label="Exporter effectif (CSV)",
         filename="players_squad.csv",
         key="players_export_squad",
     )
