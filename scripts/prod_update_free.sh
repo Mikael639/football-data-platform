@@ -25,8 +25,10 @@ done
 export PATH="${HOME}/bin:${PATH}"
 
 if [[ -f "${VAULT_ENV_FILE}" ]]; then
+    set -a
     # shellcheck disable=SC1090
     source "${VAULT_ENV_FILE}"
+    set +a
 fi
 
 echo "[1/6] Update repository"
